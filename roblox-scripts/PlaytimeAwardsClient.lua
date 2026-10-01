@@ -2011,20 +2011,27 @@ local function applyLayout()
 	--            padding that is 664, which is exactly two 324 rows plus the
 	--            16 gap. Get the padding wrong and the row below peeks in.
 	local scale, width, height = 1, 1420, 982
-	if UiResponsive then
-		scale, width, height = UiResponsive.FitPanel(1420, 982, { minWidth = 560, minHeight = 380, margin = 16,
-			-- Phones: leave game visible around it (~86% x 82% of the usable screen).
-			shareW = if UiResponsive.Layout() == "compact" then 0.86 else nil,
-			shareH = if UiResponsive.Layout() == "compact" then 0.9 else nil })
+	-- Phones: the window is the original design, scaled UNIFORMLY. It keeps
+	-- its full width, full-size header and progress strip, and one row of
+	-- full-size cards (swiped sideways) - nothing is squashed to fit. One
+	-- scale factor for X and Y; margins are simply left around it.
+	local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+	local PHONE_HEIGHT = 22 + BODY_TOP + (6 + 324 + 16) + 10   -- interior + header/strip + one card row
+	if phone then
+		local areaW, areaH = UiResponsive.ModalArea({ shareW = 0.9, shareH = 0.9 })
+		scale = math.min(1, (areaW - 32) / 1420, (areaH - 32) / PHONE_HEIGHT)
+		width, height = 1420, PHONE_HEIGHT
+	elseif UiResponsive then
+		scale, width, height = UiResponsive.FitPanel(1420, 982, { minWidth = 560, minHeight = 380, margin = 16 })
 	else
 		local camera = workspace.CurrentCamera
 		local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
 		scale = math.clamp(math.min(viewport.X / 980, viewport.Y / 640), 0.5, 1)
 	end
 	popupScale.Scale = scale
-	-- Text minimums follow the window's scale, so on a phone text shrinks to
-	-- fit its box instead of being cut off ("READ" for "READY").
-	local textShrink = math.min(1, scale * 0.6)
+	-- Text minimums follow the window's (uniform) scale, so text and its box
+	-- shrink together: nothing is cut off ("READ" for "READY"). 1 on desktop.
+	local textShrink = math.min(1, scale)
 	for _, constraint in ipairs(popup:GetDescendants()) do
 		if constraint:IsA("UITextSizeConstraint") then
 			local base = constraint:GetAttribute("BaseMin")
@@ -2036,10 +2043,10 @@ local function applyLayout()
 	popup.Size = UDim2.fromOffset(width, height)
 	compact = width < 800
 
-	-- Short windows (landscape phones): the header and progress strip are
-	-- drawn at 72%, still full width, and the body starts higher - so the
-	-- reward cards get about twice the height instead of a thin strip.
-	local k = if height < 640 then 0.55 else 1
+	-- Header and progress strip always keep their designed size (they used to
+	-- be drawn shorter on phones while staying full width, which flattened
+	-- them). The whole window is scaled uniformly instead.
+	local k = 1
 	headerFit.Scale = k
 	header.Size = UDim2.new(1 / k, 0, 0, HEADER_H)
 	stripFit.Scale = k
@@ -2079,8 +2086,22 @@ local function applyLayout()
 	-- 672 regardless. Two whole rows everywhere, one card design.
 	local DESIGN_BODY = 686
 	local fit = math.clamp(bodyHeight / DESIGN_BODY, 0.55, 1)
+	-- Phones: cards at their real size (fit 1) in one sideways row; the
+	-- jackpot column is its whole designed card, scaled uniformly to the row's
+	-- height, so it keeps its proportions and stays in view.
+	local featuredFit = fit
+	if phone then
+		fit = 1
+		featuredFit = bodyHeight / DESIGN_BODY
+		featuredWidth = math.floor(400 * featuredFit)
+		bodyWidth = innerWidth - 20 - (featuredWidth + 14)
+	end
 	scrollScale.Scale = fit
-	featuredScale.Scale = fit
+	featuredScale.Scale = featuredFit
+	grid.FillDirection = if phone then Enum.FillDirection.Vertical else Enum.FillDirection.Horizontal
+	grid.FillDirectionMaxCells = if phone then 1 else 0   -- phones: one row, new cards go to the right
+	scroll.ScrollingDirection = if phone then Enum.ScrollingDirection.X else Enum.ScrollingDirection.Y
+	scroll.AutomaticCanvasSize = if phone then Enum.AutomaticSize.X else Enum.AutomaticSize.Y
 
 	-- Sizes are in the scaled space, so these still render at bodyWidth x
 	-- bodyHeight pixels. Both frames anchor top-left, which is what a UIScale
@@ -2089,7 +2110,7 @@ local function applyLayout()
 	local localHeight = math.floor(bodyHeight / fit)
 	scroll.Size = UDim2.fromOffset(localWidth, localHeight)
 	featuredHolder.Position = UDim2.fromOffset(innerWidth - 10 - featuredWidth, bodyTop)
-	featuredHolder.Size = UDim2.fromOffset(math.floor(featuredWidth / fit), localHeight)
+	featuredHolder.Size = UDim2.fromOffset(math.floor(featuredWidth / featuredFit), math.floor(bodyHeight / featuredFit))
 	featuredHolder.Visible = not compact
 
 	-- Cards: as many 292px columns as fit, never fewer than two. All in the
@@ -2102,6 +2123,7 @@ local function applyLayout()
 	-- two rows the body has room for.
 	local columns = math.clamp(math.floor((gridWidth + 16) / (305 + 16)), 2, 3)
 	local cellWidth = math.floor((gridWidth - (columns - 1) * 16) / columns)
+	if phone then cellWidth = 305 end   -- the card's own shape in the sideways row
 	grid.CellSize = UDim2.fromOffset(cellWidth, 324)
 
 	for _, card in pairs(cards) do
@@ -2114,7 +2136,7 @@ local function applyLayout()
 		local rowFit = row and row:FindFirstChild("Fit")
 		local content = row and row:GetAttribute("ContentWidth")
 		if rowFit and type(content) == "number" and content > 0 then
-			local available = (if card.featured and not compact then math.floor(featuredWidth / fit) else cellWidth) - 12
+			local available = (if card.featured and not compact then math.floor(featuredWidth / featuredFit) else cellWidth) - 12
 			rowFit.Scale = math.clamp(available / content, 0.55, 1)
 		end
 
@@ -2188,6 +2210,33 @@ local function safeLayout()
 		warn("[PlaytimeAwards] layout failed, the popup still opens: " .. tostring(err))
 	end
 end
+
+-- Studio only: warns if a component is drawn in a different shape than it
+-- was designed (X and Y scaled differently = squashed).
+local function auditProportions()
+	if not RunService:IsStudio() or not popup.Visible then return end
+	local function check(label, object, expected)
+		if not (object and object:IsA("GuiObject") and object.Visible) then return end
+		local size = object.AbsoluteSize
+		if size.X < 2 or size.Y < 2 then return end
+		local actual = size.X / size.Y
+		if math.abs(actual / expected - 1) > 0.04 then
+			warn(("[PlaytimeAwards] DISTORTED %s: %.2f wide/tall, designed %.2f"):format(label, actual, expected))
+		end
+	end
+	for index, card in pairs(cards) do
+		if card.featured then
+			if card.frame.Parent == featuredHolder then check("jackpot card", card.frame, 400 / 686) end
+		else
+			check("card " .. tostring(index), card.frame, 305 / 324)
+		end
+	end
+	check("progress strip", strip, (popup.Size.X.Offset - 22 - 24) / 78)
+	check("header", header, (popup.Size.X.Offset - 22) / HEADER_H)
+end
+popup:GetPropertyChangedSignal("Visible"):Connect(function()
+	if popup.Visible then task.delay(0.6, auditProportions) end
+end)
 
 safeLayout()
 if UiResponsive then
