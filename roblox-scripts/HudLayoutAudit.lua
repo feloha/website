@@ -133,3 +133,34 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 task.delay(3, function() audit("startup") end)
+
+-- ===================== TAP TRACER =====================
+-- Finds taps that open the wrong window. Every tap prints the buttons under
+-- it (topmost first), and every button that actually fires prints its name:
+--   [TapTrace] tap (812,140) -> MainHUD.PlaytimeSlot.Playtime Awards | ...
+--   [TapTrace] ACTIVATED Players.<you>.PlayerGui.MainHUD.SideMenu.RebirthSlot.Rebirth
+-- If the ACTIVATED button is not the one you tapped, the first name on the
+-- tap line is what is sitting on top of it.
+local traced = {}
+local function trace(object)
+	if traced[object] or not object:IsA("GuiButton") then return end
+	traced[object] = true
+	object.Activated:Connect(function()
+		print("[TapTrace] ACTIVATED " .. object:GetFullName())
+	end)
+end
+for _, object in ipairs(playerGui:GetDescendants()) do trace(object) end
+playerGui.DescendantAdded:Connect(trace)
+
+UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+	local at = input.Position
+	local names = {}
+	for _, object in ipairs(playerGui:GetGuiObjectsAtPosition(at.X, at.Y)) do
+		if object:IsA("GuiButton") or object.Active then
+			table.insert(names, (object:GetFullName():gsub("^Players%.[^%.]+%.PlayerGui%.", "")))
+			if #names >= 4 then break end
+		end
+	end
+	print(("[TapTrace] tap (%d,%d) -> %s"):format(at.X, at.Y, if #names > 0 then table.concat(names, " | ") else "nothing clickable"))
+end)

@@ -330,6 +330,7 @@ local function makeText(parent, props)
 	constraint.MinTextSize = props.MinTextSize or 12
 	constraint.MaxTextSize = props.MaxTextSize or 32
 	constraint.Parent = label
+	constraint:SetAttribute("BaseMin", constraint.MinTextSize)   -- applyLayout scales it
 	if props.Stroke ~= false then
 		GuiStyle.TextStroke(label, props.StrokeThickness or 2)
 	end
@@ -2014,20 +2015,31 @@ local function applyLayout()
 		scale, width, height = UiResponsive.FitPanel(1420, 982, { minWidth = 560, minHeight = 380, margin = 16,
 			-- Phones: leave game visible around it (~86% x 82% of the usable screen).
 			shareW = if UiResponsive.Layout() == "compact" then 0.86 else nil,
-			shareH = if UiResponsive.Layout() == "compact" then 0.82 else nil })
+			shareH = if UiResponsive.Layout() == "compact" then 0.9 else nil })
 	else
 		local camera = workspace.CurrentCamera
 		local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
 		scale = math.clamp(math.min(viewport.X / 980, viewport.Y / 640), 0.5, 1)
 	end
 	popupScale.Scale = scale
+	-- Text minimums follow the window's scale, so on a phone text shrinks to
+	-- fit its box instead of being cut off ("READ" for "READY").
+	local textShrink = math.min(1, scale * 0.6)
+	for _, constraint in ipairs(popup:GetDescendants()) do
+		if constraint:IsA("UITextSizeConstraint") then
+			local base = constraint:GetAttribute("BaseMin")
+			if type(base) == "number" then
+				constraint.MinTextSize = math.max(1, math.floor(base * textShrink))
+			end
+		end
+	end
 	popup.Size = UDim2.fromOffset(width, height)
 	compact = width < 800
 
 	-- Short windows (landscape phones): the header and progress strip are
 	-- drawn at 72%, still full width, and the body starts higher - so the
 	-- reward cards get about twice the height instead of a thin strip.
-	local k = if height < 640 then 0.72 else 1
+	local k = if height < 640 then 0.55 else 1
 	headerFit.Scale = k
 	header.Size = UDim2.new(1 / k, 0, 0, HEADER_H)
 	stripFit.Scale = k
@@ -2035,6 +2047,11 @@ local function applyLayout()
 	strip.Size = UDim2.new(1 / k, -24 / k, 0, 78)
 	local bodyTop = math.floor(BODY_TOP * k + 0.5)
 	scroll.Position = UDim2.fromOffset(10, bodyTop)
+	-- The close button keeps a comfortable size inside the smaller header.
+	local closeSize = math.floor(62 * (if k < 1 then 0.85 / k else 1) + 0.5)
+	closeButton.Size = UDim2.fromOffset(closeSize, closeSize)
+	local closeShadow = header:FindFirstChild("CloseShadow")
+	if closeShadow then closeShadow.Size = UDim2.fromOffset(closeSize + 6, closeSize + 6) end
 
 	-- Header on narrow windows: the "New day in" pill drops to the subtitle's
 	-- row and shrinks, and the subtitle narrows, so title / subtitle / timer /
