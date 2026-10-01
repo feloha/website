@@ -110,6 +110,11 @@ function UiResponsive.TopInset()
 	return math.max(UiResponsive.ToScreen(coreProbe.AbsolutePosition).Y, 0)
 end
 
+-- ===================== SPACING =====================
+-- The one spacing scale for HUD zones (design px before any UIScale):
+--   XS tiny internal, S icon/text, M siblings, L sections, XL regions.
+UiResponsive.Space = { XS = 4, S = 8, M = 12, L = 18, XL = 28 }
+
 -- ===================== LAYOUT =====================
 function UiResponsive.Layout()
 	local _, size = UiResponsive.SafeRect()

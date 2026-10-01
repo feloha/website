@@ -1030,10 +1030,21 @@ local function refreshLayout()
 		local hud = playerGui:FindFirstChild("MainHUD")
 		local menu = hud and hud:FindFirstChild("SideMenu")
 		if menu and menu.AbsoluteSize.Y > 0 then
+			-- The phone grid is 2 x 3 with five buttons: Nibbles takes the empty
+			-- sixth cell (bottom-right), at exactly the grid's cell size, so he
+			-- is part of the grid instead of floating over the currencies.
 			local topLeft = toGui(menu.AbsolutePosition)
+			local unit = menu.AbsoluteSize.X / (88 * 2 + 12)   -- menu width = 2 cells + 1 gap (design)
+			local cell, gap = 88 * unit, 12 * unit
 			replayButton.AnchorPoint = Vector2.new(0, 0)
-			replayButton.Position = UDim2.fromOffset(topLeft.X, topLeft.Y + menu.AbsoluteSize.Y + 10)
+			replayButton.Position = UDim2.fromOffset(math.floor(topLeft.X + cell + gap + 0.5), math.floor(topLeft.Y + 2 * (cell + gap) + 0.5))
+			replayScale.Scale = cell / 72
 			placed = true
+			if not P.MenuWatched then
+				P.MenuWatched = true
+				menu:GetPropertyChangedSignal("AbsolutePosition"):Connect(function() task.defer(refreshLayout) end)
+				menu:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(refreshLayout) end)
+			end
 		end
 	end
 	if not placed then

@@ -3291,20 +3291,37 @@ local function applyHudLayout()
 	hudLayoutKey = key
 
 	if compact then
+		-- ===== PHONE ZONES =====
+		-- Top-left belongs to Roblox (menu / chat / mic). Our zones:
+		--   LEFT  : action grid, then currencies (placeStardust), from the
+		--           safe left edge, starting a section gap below the top bar
+		--   RIGHT : one stack, Settings above Playtime (SettingsClient lines
+		--           the gear up on this slot's centre), from the safe right edge
+		--   TOP   : Upgrade / Lock Base, then the status column (HudStack)
+		-- Every gap comes from the one spacing scale.
+		local SP = UiResponsive.Space or { M = 12, L = 18 }
+		local zoneTop = math.max(UiResponsive.TopInset(), safeOffset.Y) + SP.L
 		layout.Parent = nil
 		menuGrid.Parent = menu
+		menuGrid.CellPadding = UDim2.fromOffset(SP.M, SP.M)
 		setIconOnly(true)
 		menu.AnchorPoint = Vector2.new(0, 0)
-		menu.Size = UDim2.fromOffset(88 * 2 + 10, 10)
-		menu.Position = UDim2.fromOffset(safeOffset.X + 10, math.max(UiResponsive.TopInset(), safeOffset.Y) + 6)
-		playSlot.Position = UDim2.new(1, -(rightInset + 10), 0.42, 0)
+		menu.Size = UDim2.fromOffset(88 * 2 + SP.M, 10)
+		menu.Position = UDim2.fromOffset(safeOffset.X + SP.M, zoneTop)
+		-- Right stack: the gear (40) sits on top, so Playtime starts below it.
+		playSlot.AnchorPoint = Vector2.new(1, 0)
+		playSlot.Position = UDim2.new(1, -(rightInset + SP.M), 0, zoneTop + 40 + SP.M)
 		-- 0.7 of the new 228 is 160, which is what 0.8 of the old 196 came to, so
 		-- phones keep the size they had while desktop gets the bigger button.
-		setMultipliers({ [actionBar] = 0.9, [top] = 0.9 * CURRENCY_HUD_SCALE, [gemsPill] = 0.9 * CURRENCY_HUD_SCALE * GEMS_HUD_SCALE, [menu] = 0.8, [playSlot] = 0.7 })
+		-- Grid at full HUD scale: its cells stay comfortably tappable (~40-48 px).
+		setMultipliers({ [actionBar] = 0.9, [top] = 0.9 * CURRENCY_HUD_SCALE, [gemsPill] = 0.9 * CURRENCY_HUD_SCALE * GEMS_HUD_SCALE, [menu] = 1, [playSlot] = 0.7 })
 	else
 		menuGrid.Parent = nil
+		menuGrid.CellPadding = UDim2.fromOffset(10, 10)
 		layout.Parent = menu
 		setIconOnly(false)
+		playSlot.AnchorPoint = Vector2.new(1, 0.5)
+		actionBar.Position = UDim2.new(0.5, 0, 0, 14)
 		menu.AnchorPoint = Vector2.new(0, 0.5)
 		menu.Size = UDim2.fromOffset(184, 10)
 		menu.Position = UDim2.new(0, safeOffset.X + 20, 0.5, 0)
@@ -3319,6 +3336,30 @@ applyHudLayout()
 if UiResponsive then
 	UiResponsive.Changed:Connect(applyHudLayout)
 end
+
+-- Phones: Upgrade / Lock Base share the top-bar row only with real room to
+-- spare beside Roblox's buttons (GuiService.TopbarInset is the part of that
+-- row Roblox leaves free). Otherwise the pair drops just below the bar, on
+-- the same centre line, so it never crowds the menu / chat / mic buttons.
+local function placeTopActions()
+	if not (UiResponsive and UiResponsive.Layout() == "compact") then return end
+	local GuiServiceLocal = game:GetService("GuiService")
+	local SP = UiResponsive.Space or { S = 8, L = 18, XL = 28 }
+	local screenW = UiResponsive.Screen().X
+	local halfW = actionBar.AbsoluteSize.X / 2
+	local freeLeft = 0
+	pcall(function() freeLeft = GuiServiceLocal.TopbarInset.Min.X end)
+	local y = SP.S
+	if screenW / 2 - halfW < freeLeft + SP.XL then
+		y = UiResponsive.TopInset() + SP.S
+	end
+	if actionBar.Position.Y.Offset ~= y then
+		actionBar.Position = UDim2.new(0.5, 0, 0, y)
+	end
+end
+actionBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeTopActions)
+if UiResponsive then UiResponsive.Changed:Connect(function() task.defer(placeTopActions) end) end
+task.defer(placeTopActions)
 
 -- ===== stardust placement =====
 -- Desktop and tablets: right under the side menu, as marked. If there's no
@@ -3336,12 +3377,13 @@ local function placeStardust()
 	local menuBottom = inset + menu.AbsolutePosition.Y + menu.AbsoluteSize.Y
 	local height = top.AbsoluteSize.Y
 	local compact = UiResponsive and UiResponsive.Layout() == "compact"
-	local gap = if compact then 8 else 14
+	local SP = UiResponsive and UiResponsive.Space or { M = 12, L = 18 }
+	local gap = if compact then SP.L else 14
 
 	-- The cluster sits a little left of the side menu's edge (CLUSTER_NUDGE
 	-- design px), but never closer to the screen edge than 1.5% of its width.
 	local pixel = top.AbsoluteSize.Y / math.max(top.Size.Y.Offset, 1)
-	local CLUSTER_NUDGE = 6
+	local CLUSTER_NUDGE = if compact then 0 else 6   -- phones: same left edge as the grid
 	-- One currency cluster, placed as a group: Stardust on top, the narrower
 	-- Gems panel centred right under it (same centre X), a 6 px gap between.
 	local GEMS_GAP = 6 * pixel
@@ -3349,7 +3391,7 @@ local function placeStardust()
 	local gemsSize = gemsPill.AbsoluteSize
 	local total = height + GEMS_GAP + gemsSize.Y
 	local x = math.max(menuLeft - CLUSTER_NUDGE * pixel, screen.X * 0.015)
-	local y = menuBottom + gap + 4 * pixel
+	local y = menuBottom + gap + (if compact then 0 else 4 * pixel)
 	-- Always under Inventory and above the tutorial button. On short windows
 	-- the gaps tighten first, then the cluster tucks up toward the menu.
 	if not compact and y + total > screen.Y - TUTORIAL_RESERVE then
@@ -3358,8 +3400,11 @@ local function placeStardust()
 		y = math.max(screen.Y - TUTORIAL_RESERVE - total, menuBottom + 4)
 	end
 	top.Position = UDim2.fromOffset(math.floor(x + 0.5), math.floor(y + 0.5))
+	-- Desktop: Gems centred under Stardust. Phones: one left edge for the
+	-- whole left zone (grid, Stardust, Gems).
+	local gemsX = if compact then x else x + (width - gemsSize.X) / 2
 	gemsPill.Position = UDim2.fromOffset(
-		math.floor(x + (width - gemsSize.X) / 2 + 0.5),
+		math.floor(gemsX + 0.5),
 		math.floor(y + height + GEMS_GAP + gemsSize.Y / 2 + 0.5))
 end
 

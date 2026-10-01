@@ -223,9 +223,20 @@ local function refreshScale()
 			-- Top-right, well away from the jump button and the playtime button.
 			local top = math.max(UiResponsive.TopInset(), safeOffset.Y) + 6
 			gearHolder.AnchorPoint = Vector2.new(1, 0)
-			-- 40: the same visual weight as the HUD buttons around it.
+			-- Right zone: one stack with the Playtime button (MainHUD owns the
+			-- zone). The gear sits on the Playtime button's centre line, one
+			-- sibling gap above it; 40 matches the HUD buttons around it.
+			local SP = UiResponsive.Space or { M = 12, L = 18 }
+			gearHolder.AnchorPoint = Vector2.new(0.5, 1)
 			gearHolder.Size = UDim2.fromOffset(40, 40)
-			gearHolder.Position = UDim2.new(1, -(right + 12), 0, top)
+			local hud = playerGui:FindFirstChild("MainHUD")
+			local slot = hud and hud:FindFirstChild("PlaytimeSlot", true)
+			if slot and slot.AbsoluteSize.X > 0 then
+				local at = UiResponsive.ToScreen(slot.AbsolutePosition)
+				gearHolder.Position = UDim2.fromOffset(math.floor(at.X + slot.AbsoluteSize.X / 2 + 0.5), math.floor(at.Y - SP.M + 0.5))
+			else
+				gearHolder.Position = UDim2.new(1, -(right + SP.M + 20), 0, top + SP.L + 40)
+			end
 			fpsLabel.AnchorPoint = Vector2.new(1, 0)
 			fpsLabel.Position = UDim2.new(1, -(right + 58), 0, top + 6)
 		elseif touchDevice then
@@ -254,6 +265,15 @@ if UiResponsive then
 else
 	camera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshScale)
 end
+-- The phone gear follows MainHUD's Playtime button (same right stack).
+task.spawn(function()
+	local hud = playerGui:WaitForChild("MainHUD", 30)
+	local slot = hud and hud:WaitForChild("PlaytimeSlot", 30)
+	if not slot then return end
+	slot:GetPropertyChangedSignal("AbsolutePosition"):Connect(refreshScale)
+	slot:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshScale)
+	refreshScale()
+end)
 
 -- Flat translucent navy. The old multiply-gradient crushed this to near black.
 local panel = Instance.new("Frame")
