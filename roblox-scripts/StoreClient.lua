@@ -128,8 +128,8 @@ local TUNE = {
 	-- Leaderboards windows; phones keep the full size (space is tight there).
 	WidthShare = 0.72,
 	HeightShare = 0.76,
-	CompactWidthShare = 0.90,
-	CompactHeightShare = 0.95,
+	CompactWidthShare = 0.92,   -- phones: of the usable area (below the top bar)
+	CompactHeightShare = 0.9,
 	MaxUpscale = 1.2,
 
 	HeaderHeight = 0.32,      -- share of window height
@@ -467,6 +467,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "StoreUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
+if UiResponsive and UiResponsive.UseModalInsets then UiResponsive.UseModalInsets(gui) end   -- below the top bar
 gui.DisplayOrder = 25
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
@@ -665,6 +666,12 @@ end
 local function refreshScale()
 	local vp = screenSize()
 	if vp.X < 1 then return end
+	-- Phones: the window fits the usable area (below the top bar, inside the
+	-- notch). Bigger screens keep the exact size they had.
+	if UiResponsive and UiResponsive.ModalArea and UiResponsive.Layout and UiResponsive.Layout() == "compact" then
+		local ok, w, h = pcall(UiResponsive.ModalArea, { shareW = 1, shareH = 1 })
+		if ok and type(w) == "number" and w > 1 then vp = Vector2.new(w, h) end
+	end
 
 	local compact = UiResponsive ~= nil and UiResponsive.Layout ~= nil and UiResponsive.Layout() == "compact"
 	local scale = math.min(
@@ -1377,7 +1384,9 @@ local function makeSection(titleText, items, purchaseType, order)
 		lastWidth = width
 
 		local gap = TUNE.CardGap
-		local columns = math.clamp(TUNE.CardsPerRow, 1, #cards)
+		-- Phones: two bigger, readable cards per row (the list scrolls).
+		local phone = UiResponsive ~= nil and UiResponsive.Layout ~= nil and UiResponsive.Layout() == "compact"
+		local columns = math.clamp(if phone then 2 else TUNE.CardsPerRow, 1, #cards)
 		local cardWidth = (width - (columns - 1) * gap) / columns
 		local cardHeight = math.floor(cardWidth / TUNE.CardRatio)
 		local rows = math.ceil(#cards / columns)

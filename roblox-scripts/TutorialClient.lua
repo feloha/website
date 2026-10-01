@@ -1021,7 +1021,7 @@ local function refreshLayout()
 	-- size so the words stay readable.)
 	local size = if compact then 1 else P.Scale
 	local panelScale = math.clamp(math.min(screen.X / 1600, screen.Y / 900) * size, 0.45, 1.35)
-	dialogScale.Scale = math.min(panelScale, (screen.X - 24) / dialogWidth, (screen.Y * (if compact then 0.46 else 0.3)) / P.H)
+	dialogScale.Scale = math.min(panelScale, (screen.X - 24) / dialogWidth, (screen.Y * (if compact then 0.36 else 0.3)) / P.H)
 	miniScale.Scale = math.min(scale, (screen.X - 24) / math.max(mini.Size.X.Offset, 1))
 	replayScale.Scale = scale
 
@@ -1934,6 +1934,15 @@ end
 -- Keeps the dialog above the carry card while you're holding a black hole.
 local function refreshBottomGap()
 	local gap = BASE_GAP
+	-- Phones: sit clearly above the bottom edge (home bar, thumbs), not on it.
+	if compact then
+		local safeBottom = 0
+		if UiResponsive and UiResponsive.SafeRect then
+			local position, size = UiResponsive.SafeRect()
+			safeBottom = math.max(origin.AbsoluteSize.Y - (position.Y + size.Y), 0)
+		end
+		gap = math.max(gap, safeBottom + math.floor(origin.AbsoluteSize.Y * 0.06))
+	end
 	if not carryCard or not carryCard.Parent then
 		local actionGui = playerGui:FindFirstChild("BlackHoleActionUI")
 		carryCard = actionGui and actionGui:FindFirstChild("CarryCard", true)

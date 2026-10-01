@@ -2451,7 +2451,16 @@ local function buildUpgradeWindow()
 	local lastFit = nil
 	local function refreshUpgradeScale()
 		local availW, availH
-		if UiResponsive and UiResponsive.SafeRect then
+		local fit, below = FIT, 0
+		if UiResponsive and UiResponsive.ModalArea then
+			-- Below Roblox's top bar, inside the notch, centred in that space.
+			local phone = UiResponsive.Layout() == "compact"
+			availW, availH = UiResponsive.ModalArea(if phone then { shareW = 1, shareH = 0.96 } else nil)
+			below = math.max(UiResponsive.TopInset(), 0) / 2
+			-- Phones: fit the panel itself; only its decorative stars and
+			-- clouds may hang past the edge, never a button.
+			if UiResponsive.Layout() == "compact" then fit = PANEL end
+		elseif UiResponsive and UiResponsive.SafeRect then
 			local _, size = UiResponsive.SafeRect()
 			availW, availH = size.X, size.Y
 		else
@@ -2459,7 +2468,8 @@ local function buildUpgradeWindow()
 			availW, availH = vp.X, vp.Y
 		end
 		if availW < 2 or availH < 2 then return end
-		local scale = math.clamp(math.min((availW - 24) / FIT.X, (availH - 24) / FIT.Y), 0.3, 1)
+		upgradePopup.Position = UDim2.new(0.5, 0, 0.5, below)
+		local scale = math.clamp(math.min((availW - 24) / fit.X, (availH - 24) / fit.Y), 0.3, 1)
 		if scale == lastFit then return end
 		lastFit = scale
 		fitScale.Scale = scale

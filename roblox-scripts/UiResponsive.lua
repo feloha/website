@@ -13,6 +13,9 @@
 --   Boost()         1 up to 1080p, then grows with the screen (1440p, 4K,
 --                   ultrawide), so UI designed at 1080p keeps its share of
 --                   the screen instead of shrinking on big displays
+--   ModalArea()     the room a centred window may use: below Roblox's top bar,
+--                   inside the device safe area; on phones ~92% x 90% of it
+--   UseModalInsets(gui)  make a modal ScreenGui use that same area
 --   FitScale()      scale a fixed panel to fit the safe area
 --   FitPanel()      scale + size for a panel whose content scrolls: keeps text
 --                   readable on phones by shrinking the panel before the text
@@ -129,15 +132,40 @@ function UiResponsive.Boost()
 	return math.clamp(math.min(size.X / 1920, size.Y / 1080), 1, 1.6)
 end
 
--- Scale for a fixed-size panel so it fits the safe area.
+-- Width, height a centred window may use: the area below Roblox's top bar
+-- and inside the device safe area (CoreUISafeInsets). Modal ScreenGuis use
+-- the same area (UiResponsive.UseModalInsets), so a window centred in its
+-- ScreenGui is centred in this space and never sits under the menu / chat /
+-- mic buttons. On phones it also keeps a margin of game visible around it.
+-- options: shareW / shareH override the phone share (0.92 x 0.9).
+function UiResponsive.ModalArea(options)
+	options = options or {}
+	local size = coreProbe.AbsoluteSize
+	if size.X < 2 or size.Y < 2 then
+		local _, safe = UiResponsive.SafeRect()
+		size = safe - Vector2.new(0, UiResponsive.TopInset())
+	end
+	local width, height = size.X, size.Y
+	local compact = UiResponsive.Layout() == "compact"
+	local shareW = options.shareW or (if compact then 0.92 else 1)
+	local shareH = options.shareH or (if compact then 0.9 else 1)
+	return width * shareW, height * shareH
+end
+
+-- Puts a modal ScreenGui in the area below the top bar (see ModalArea).
+function UiResponsive.UseModalInsets(screenGui)
+	pcall(function() screenGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets end)
+end
+
+-- Scale for a fixed-size panel so it fits the modal area.
 -- options: margin (12), min (0.3), max (1)
 function UiResponsive.FitScale(designW, designH, options)
 	options = options or {}
-	local _, size = UiResponsive.SafeRect()
+	local areaW, areaH = UiResponsive.ModalArea(options)
 	local margin = options.margin or 12
 	local scale = math.min(
-		(size.X - margin * 2) / designW,
-		(size.Y - margin * 2) / designH,
+		(areaW - margin * 2) / designW,
+		(areaH - margin * 2) / designH,
 		(options.max or 1) * UiResponsive.Boost())
 	return math.max(scale, options.min or 0.3)
 end
@@ -149,10 +177,10 @@ end
 -- returns scale, width, height (width/height in design units)
 function UiResponsive.FitPanel(designW, designH, options)
 	options = options or {}
-	local _, size = UiResponsive.SafeRect()
+	local areaW, areaH = UiResponsive.ModalArea(options)
 	local margin = options.margin or 12
-	local availW = math.max(size.X - margin * 2, 60)
-	local availH = math.max(size.Y - margin * 2, 60)
+	local availW = math.max(areaW - margin * 2, 60)
+	local availH = math.max(areaH - margin * 2, 60)
 	local minW = math.min(options.minWidth or designW, designW)
 	local minH = math.min(options.minHeight or designH, designH)
 

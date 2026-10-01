@@ -1889,6 +1889,13 @@ if RunService:IsStudio() then
 		end
 		refreshHint()
 		remotes:GetAttributeChangedSignal("DebugNoCooldown"):Connect(refreshHint)
+		-- Only with a keyboard: on a phone (or the device emulator) the keys
+		-- can't be pressed and the line just covers the bottom of the screen.
+		local function refreshHintVisible()
+			hint.Visible = UserInputService.KeyboardEnabled and not UserInputService.TouchEnabled
+		end
+		refreshHintVisible()
+		UserInputService.LastInputTypeChanged:Connect(refreshHintVisible)
 
 		local commands = {
 			[Enum.KeyCode.G] = "event",

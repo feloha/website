@@ -542,6 +542,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "LeaderboardsUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
+if UiResponsive and UiResponsive.UseModalInsets then UiResponsive.UseModalInsets(gui) end   -- below the top bar
 gui.DisplayOrder = 40
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui

@@ -223,10 +223,11 @@ local function refreshScale()
 			-- Top-right, well away from the jump button and the playtime button.
 			local top = math.max(UiResponsive.TopInset(), safeOffset.Y) + 6
 			gearHolder.AnchorPoint = Vector2.new(1, 0)
-			gearHolder.Size = UDim2.fromOffset(46, 46)
+			-- 40: the same visual weight as the HUD buttons around it.
+			gearHolder.Size = UDim2.fromOffset(40, 40)
 			gearHolder.Position = UDim2.new(1, -(right + 12), 0, top)
 			fpsLabel.AnchorPoint = Vector2.new(1, 0)
-			fpsLabel.Position = UDim2.new(1, -(right + 64), 0, top + 9)
+			fpsLabel.Position = UDim2.new(1, -(right + 58), 0, top + 6)
 		elseif touchDevice then
 			gearHolder.AnchorPoint = Vector2.new(1, 1)
 			gearHolder.Size = UDim2.fromOffset(68, 68)

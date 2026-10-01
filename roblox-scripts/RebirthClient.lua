@@ -259,6 +259,7 @@ local gui = make("ScreenGui", {
 	Name = "RebirthUI", ResetOnSpawn = false, IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 6,
 }, playerGui)
+if UiResponsive and UiResponsive.UseModalInsets then UiResponsive.UseModalInsets(gui) end   -- below the top bar
 
 local root = make("Frame", {
 	Name = "RebirthWindow", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.47),
@@ -634,7 +635,9 @@ bigStar(80, 60, 64)
 -- ===================== FIT / REGISTER =====================
 local function refreshScale()
 	local availW, availH
-	if UiResponsive and UiResponsive.SafeRect then
+	if UiResponsive and UiResponsive.ModalArea then
+		availW, availH = UiResponsive.ModalArea()
+	elseif UiResponsive and UiResponsive.SafeRect then
 		local _, size = UiResponsive.SafeRect()
 		availW, availH = size.X, size.Y
 	else

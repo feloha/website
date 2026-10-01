@@ -224,12 +224,14 @@ gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.IgnoreGuiInset = true
 gui.DisplayOrder = 8
+if UiResponsive and UiResponsive.UseModalInsets then UiResponsive.UseModalInsets(gui) end   -- below the top bar
 gui.Parent = playerGui
 
 local dim = makeFrame({
 	Name = "Backdrop",
 	Parent = gui,
-	Size = UDim2.fromScale(1, 1),
+	Position = UDim2.fromOffset(-300, -300),   -- reaches under the top bar too
+	Size = UDim2.new(1, 600, 1, 600),
 	Color = Color3.fromRGB(6, 10, 26),
 	Transparency = 1,
 	ZIndex = 1,
@@ -261,9 +263,10 @@ local refreshTimeOfferLayout=function() end
 local function fitArea()
 	camera=workspace.CurrentCamera or camera
 	local vp=camera.ViewportSize
-	if UiResponsive and UiResponsive.SafeRect then
-		local ok,_,size=pcall(UiResponsive.SafeRect)
-		if ok and typeof(size)=="Vector2" and size.X>1 then vp=size end
+	if UiResponsive and UiResponsive.ModalArea then
+		-- Below the top bar, inside the safe area (the ScreenGui uses the same area).
+		local ok,w,h=pcall(UiResponsive.ModalArea,{shareW=1,shareH=1})
+		if ok and type(w)=="number" and w>1 then vp=Vector2.new(w,h) end
 	end
 	return vp,1.05*math.clamp(math.min(vp.X/1920,vp.Y/1080),1,1.6)
 end

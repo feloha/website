@@ -164,11 +164,16 @@ gui.Name = "CosmicIndexHUD"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.IgnoreGuiInset = true
+do
+	local ok, responsive = pcall(function() return require(game:GetService("ReplicatedStorage"):WaitForChild("UiResponsive", 5)) end)
+	if ok and type(responsive) == "table" and responsive.UseModalInsets then responsive.UseModalInsets(gui) end   -- below the top bar
+end
 gui.DisplayOrder = 7
 gui.Parent = playerGui
 
 local dim = Instance.new("Frame")
-dim.Size = UDim2.fromScale(1, 1)
+dim.Position = UDim2.fromOffset(-300, -300)   -- reaches under the top bar too
+dim.Size = UDim2.new(1, 600, 1, 600)
 dim.BackgroundColor3 = Color3.fromRGB(4, 7, 20)
 dim.BackgroundTransparency = 1
 dim.BorderSizePixel = 0
@@ -180,7 +185,7 @@ local panel = Instance.new("Frame")
 panel.Name = "IndexPanel"
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.Size = if IS_TOUCH then UDim2.fromScale(0.94, 0.9) else UDim2.fromScale(0.82, 0.82)
+panel.Size = if IS_TOUCH then UDim2.fromScale(0.92, 0.9) else UDim2.fromScale(0.82, 0.82)
 panel.BackgroundColor3 = PANEL
 panel.BackgroundTransparency = 0.12
 panel.BorderSizePixel = 0
