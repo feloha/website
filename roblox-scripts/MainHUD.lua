@@ -3436,9 +3436,8 @@ local GuiService = game:GetService("GuiService")
 -- Nibbles button bottom-left; that button is gone, so only a margin is left.)
 local BOTTOM_MARGIN = 12
 -- Where Gems sits under Stardust, as a share of the spare width between them:
--- 0 = same left edge, 0.5 = centred. A little left of centre reads as one
--- compact cluster.
-local GEMS_SHIFT = 0.2
+-- 0 = same left edge (as asked), 0.5 = centred.
+local GEMS_SHIFT = 0
 
 local function placeStardust()
 	local screen = camera.ViewportSize
@@ -3472,7 +3471,7 @@ local function placeStardust()
 		y = math.max(screen.Y - BOTTOM_MARGIN - total, menuBottom + 4)
 	end
 	top.Position = UDim2.fromOffset(math.floor(x + 0.5), math.floor(y + 0.5))
-	-- Desktop: Gems a little left of centre under Stardust. Phones: one left edge for the
+	-- Desktop: Gems starts at Stardust's left edge. Phones: one left edge for the
 	-- whole left zone (grid, Stardust, Gems).
 	local gemsX = if compact then x else x + (width - gemsSize.X) * GEMS_SHIFT
 	gemsPill.Position = UDim2.fromOffset(

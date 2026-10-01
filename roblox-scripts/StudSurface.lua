@@ -40,22 +40,24 @@ StudSurface.AssetId = "rbxassetid://140302758156355"
 StudSurface.SHOW_STUD_BOUNDS = false
 
 local DEFAULTS = {
-	Transparency = 0.24,      -- 0.15-0.35 range; tuned to sit under the gloss
-	HoverTransparency = 0.17,
+	Transparency = 0.06,      -- clearly visible; the gloss still sits on top
+	HoverTransparency = 0.0,
 	DisabledTransparency = 0.6,
-	TileSize = 20,            -- design px per stud cell (before the HUD's UIScale)
+	TileSize = 15,            -- design px per stud cell (before the HUD's UIScale)
 	-- How many studs ACROSS the supplied image. 1 = the image is one stud
 	-- cell (the usual seamless tile). If the picture is a whole grid of studs
 	-- (e.g. 4 x 4), set 4 and every stud keeps the size above.
-	StudsPerTile = 1,
-	MinTilePx = 9,            -- on-screen clamp, phones
-	MaxTilePx = 26,           -- on-screen clamp, large monitors
+	-- The supplied texture holds a grid of studs (it rendered as fine noise
+	-- at 1), so each repeat of the picture spans this many stud cells.
+	StudsPerTile = 4,
+	MinTilePx = 8,            -- on-screen clamp per stud, phones
+	MaxTilePx = 22,           -- on-screen clamp per stud, large monitors
 	InsetShare = 0.5,         -- edge breathing room, in studs
 	CornerRadius = 0,         -- the face's own radius, in px
 	ZIndex = 1,
-	TintLighten = 0.12,       -- toward white, so the baked shading still reads
+	TintLighten = 0.32,      -- lighter than the face, so the studs stand out of it       -- toward white, so the baked shading still reads
 	TintDeepen = 0.08,        -- toward the colour's own darker shade, for richness
-	LabelFade = 0.22,         -- extra transparency at the bottom (behind the label)
+	LabelFade = 0.12,         -- extra transparency at the bottom (behind the label)
 }
 
 local INK = Color3.fromRGB(20, 28, 65)
