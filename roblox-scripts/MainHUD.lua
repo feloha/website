@@ -2214,9 +2214,14 @@ local function buildUpgradeWindow()
 			label.Text = str
 			-- Longer wording steps down to fit between the pill's round ends.
 			-- Fredoka One capitals plus the outline run about 0.66 of the size.
-			local iconW = if style.icon then h * 0.58 + 6 else 0
+			-- Phones: the price is the thing people read, so it and its star
+			-- run larger (the window itself is drawn small there).
+			local big = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+			local iconK = if big then 0.64 else 0.58
+			icon.Size = UDim2.fromOffset(h * iconK, h * iconK)
+			local iconW = if style.icon then h * iconK + 6 else 0
 			local fitWidth = (w - h * 0.8 - iconW) / math.max((utf8.len(str) or #str) * 0.66, 1)
-			label.TextSize = math.floor(math.min(h * 0.52, fitWidth))
+			label.TextSize = math.floor(math.min(h * (if big then 0.62 else 0.52), fitWidth))
 			icon.Visible = style.icon and icon.Image ~= ""
 		end
 
@@ -2454,6 +2459,7 @@ local function buildUpgradeWindow()
 
 	-- ---------- fit to screen ----------
 	local lastFit = nil
+	local UPGRADE_PHONE_GROW = 1.1      -- phones: the whole window, uniformly
 	local function refreshUpgradeScale()
 		local availW, availH
 		local fit, below = FIT, 0
@@ -2473,8 +2479,28 @@ local function buildUpgradeWindow()
 			availW, availH = vp.X, vp.Y
 		end
 		if availW < 2 or availH < 2 then return end
-		upgradePopup.Position = UDim2.new(0.5, 0, 0.5, below)
 		local scale = math.clamp(math.min((availW - 24) / fit.X, (availH - 24) / fit.Y), 0.3, 1)
+		if UiResponsive and UiResponsive.ModalArea and UiResponsive.Layout() == "compact" then
+			-- Phones: 10% larger, uniformly. The panel may use the middle of
+			-- the top-bar strip only when its whole width clears Roblox's
+			-- buttons there; otherwise it stays below the bar.
+			local want = scale * UPGRADE_PHONE_GROW
+			local _, safe = UiResponsive.SafeRect()
+			local fullW, belowH = UiResponsive.ModalArea({ shareW = 1, shareH = 1 })
+			local roomH = belowH - 10
+			local screenW = UiResponsive.Screen().X
+			local panelW = PANEL.X * want
+			local free = nil
+			pcall(function() free = game:GetService("GuiService").TopbarInset end)
+			if free and free.Height > 0 then
+				local left, right = screenW / 2 - panelW / 2, screenW / 2 + panelW / 2
+				if left >= free.Min.X + 8 and right <= free.Max.X - 8 then roomH = safe.Y - 12 end
+			end
+			scale = math.max(scale, math.min(want, (fullW - 16) / PANEL.X, roomH / PANEL.Y))
+			-- As low as the space allows (clear of the bar), never off the bottom.
+			below = math.max(0, math.min(below, (safe.Y - PANEL.Y * scale) / 2 - 6))
+		end
+		upgradePopup.Position = UDim2.new(0.5, 0, 0.5, below)
 		if scale == lastFit then return end
 		lastFit = scale
 		fitScale.Scale = scale

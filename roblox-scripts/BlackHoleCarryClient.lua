@@ -450,7 +450,10 @@ camera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshScale)
 
 -- ===== CARD =====
 
-local CARD_POSITION = UDim2.new(0.5, 0, 1, -CARD.BottomOffset)
+local CARD_HOME = UDim2.new(0.5, 0, 1, -CARD.BottomOffset)
+-- Where the card currently lives. Home unless the layout manager moved it
+-- out of the way of something more important (the tutorial dialog).
+local CARD_POSITION = CARD_HOME
 
 local cardHolder = Instance.new("Frame")
 cardHolder.Name = "CarryCard"
@@ -927,6 +930,30 @@ local function closeCard()
 			cardHolder.Visible = false
 		end
 	end)
+end
+
+-- The global layout manager moves the card when it would cover something
+-- with a higher priority, to the free spot closest to home.
+do
+	local module = ReplicatedStorage:FindFirstChild("UILayoutManager")
+	local ok, Layout = pcall(function() return module and require(module) end)
+	if ok and type(Layout) == "table" and Layout.Register then
+		Layout.Register("CarryCard", cardHolder, {
+			Priority = 70,
+			CanMove = true,
+			Home = CARD_HOME,
+			Candidates = { "BottomRight", "BottomLeft", "RightCenter", "LeftCenter" },
+			State = "INTERACTION",
+			Place = function(position)
+				CARD_POSITION = position
+				if cardShown then
+					tween(cardHolder, MOTION.CardSlide, { Position = position })
+				else
+					cardHolder.Position = position
+				end
+			end,
+		})
+	end
 end
 
 -- ===== DROP INDICATOR =====

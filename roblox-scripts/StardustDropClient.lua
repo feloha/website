@@ -526,6 +526,13 @@ local Feedback = (function()
 		root.Parent = gui
 		local rootScale = Instance.new("UIScale")   -- the pop in / pop out
 		rootScale.Parent = root
+		do   -- known to the layout manager, so collisions with it are reported
+			local module = ReplicatedStorage:FindFirstChild("UILayoutManager")
+			local ok, Layout = pcall(function() return module and require(module) end)
+			if ok and type(Layout) == "table" and Layout.Register then
+				Layout.Register("ComboMeter", root, { Priority = 55 })
+			end
+		end
 
 		-- Size follows the screen (the panel's own shape is kept). Placement:
 		-- "TopRight" = the top-right corner, below Roblox's top bar, with

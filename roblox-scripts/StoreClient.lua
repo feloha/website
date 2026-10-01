@@ -127,13 +127,27 @@ local TUNE = {
 	-- Phones (landscape screens are short): a shorter window with the same
 	-- header. The products scroll, and the window can be drawn ~30% larger,
 	-- so cards and text are bigger instead of squeezed into a tall frame.
-	CompactDesignHeight = 900,
+	CompactDesignHeight = 820,
 	-- Share of the screen the window may use. Desktop matches the Upgrade and
 	-- Leaderboards windows; phones keep the full size (space is tight there).
 	WidthShare = 0.72,
 	HeightShare = 0.76,
-	CompactWidthShare = 0.92,   -- phones: of the usable area (below the top bar)
-	CompactHeightShare = 0.9,
+	CompactWidthShare = 0.94,   -- phones: of the usable area (below the top bar)
+	CompactHeightShare = 0.95,
+	-- Phones: the header is drawn at this share of its desktop size (cart,
+	-- logo, gift), so the cards get the height. The close button keeps a
+	-- thumb-sized floor instead.
+	CompactHeaderScale = 0.6,
+	CompactCloseSize = 100,
+	-- Touch screens: each card section is one sideways row instead of a grid.
+	-- Card width comes from the row width so this many cards are in view -
+	-- three whole cards and a sliver of the fourth on a phone says "swipe".
+	PhoneVisibleCards = 3.15,
+	TabletVisibleCards = 4.15,
+	StripGapPx = 12,          -- screen pixels between cards (held at 8-14)
+	StripPadSide = 18,        -- design pixels: room for the card glow
+	StripPadTop = 10,
+	StripPadBottom = 36,      -- card shadow + the scroll bar
 	MaxUpscale = 1.2,
 
 	HeaderHeight = 0.32,      -- share of window height
@@ -491,6 +505,26 @@ do
 		waited += task.wait()
 	end
 	PHONE_STORE = UiResponsive ~= nil and UiResponsive.Layout ~= nil and UiResponsive.Layout() == "compact"
+end
+-- Touch tablets get the sideways rows too; a desktop at the same size keeps
+-- the grid it always had.
+local TABLET_STORE = not PHONE_STORE and UiResponsive ~= nil and UiResponsive.Layout ~= nil
+	and UiResponsive.Layout() == "medium" and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local STRIP_CARDS = if PHONE_STORE then TUNE.PhoneVisibleCards elseif TABLET_STORE then TUNE.TabletVisibleCards else nil
+
+-- Phones: one compact header. Every header measurement shrinks together, so
+-- the cart/logo lockup keeps its exact proportions.
+local HEADER_SCALE = 1
+if PHONE_STORE then
+	HEADER_SCALE = TUNE.CompactHeaderScale
+	for _, key in ipairs({ "ShopIcon", "ShopLeft", "ShopSpillLeft", "TitleHeight", "TitleLeft", "TitleTop",
+		"SubtitleTop", "GiftSize", "HeaderGapRight" }) do
+		TUNE[key] = math.floor(TUNE[key] * HEADER_SCALE)
+	end
+	TUNE.CloseSize = TUNE.CompactCloseSize
+	TUNE.BannerHeight = 52
+	TUNE.BannerStar = 50
+	TUNE.BannerGapBelow = 6
 end
 local DESIGN_W = TUNE.DesignWidth
 local DESIGN_H = if PHONE_STORE then TUNE.CompactDesignHeight else TUNE.DesignHeight
@@ -870,7 +904,7 @@ local function showToast(message, color)
 end
 
 -- ===================== HEADER =====================
-local headerHeight = math.floor(TUNE.DesignHeight * TUNE.HeaderHeight)   -- same header on every screen
+local headerHeight = math.floor(TUNE.DesignHeight * TUNE.HeaderHeight * HEADER_SCALE)   -- compact on phones
 
 local header = frame(content, {
 	Name = "Header",
@@ -917,7 +951,7 @@ do
 	-- buttons: no cloud, no sparkle cluster, nothing else in that area.
 	image(header, {
 		Name = "HeaderPlanet", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.705, 0.46),
-		Size = UDim2.fromOffset(175, 175), Alpha = 0.34, ZIndex = 21, Image = UIAssets.Planet,
+		Size = UDim2.fromOffset(175 * HEADER_SCALE, 175 * HEADER_SCALE), Alpha = 0.34, ZIndex = 21, Image = UIAssets.Planet,
 	})
 	-- Four, each in clear space: two near the branding, two in the gap
 	-- between the planet and the buttons.
@@ -1009,14 +1043,16 @@ local subtitle = text(header, {
 	Size = UDim2.fromOffset(620, TUNE.SubtitleHeight),
 	Text = "Get exclusive perks to progress faster!", AlignX = Enum.TextXAlignment.Left,
 	Color = Color3.fromRGB(216, 248, 255), Max = 32, Min = 14, StrokeThickness = 3, ZIndex = 23,
+	Visible = not PHONE_STORE,   -- too small to read in the compact header
 })
 
-neon(header, UIAssets.Gift, UDim2.new(1, -(TUNE.HeaderGapRight + TUNE.CloseSize + 30), 0.5, 0),
+local GIFT_GAP = math.floor(30 * HEADER_SCALE)
+neon(header, UIAssets.Gift, UDim2.new(1, -(TUNE.HeaderGapRight + TUNE.CloseSize + GIFT_GAP), 0.5, 0),
 	Vector2.new(TUNE.GiftSize, TUNE.GiftSize), Vector2.new(1, 0.5), Color3.fromRGB(150, 205, 255), 24)
 
 local giftButton = imageButton(header, {
 	Name = "GiftButton", AnchorPoint = Vector2.new(1, 0.5),
-	Position = UDim2.new(1, -(TUNE.HeaderGapRight + TUNE.CloseSize + 30), 0.5, 0),
+	Position = UDim2.new(1, -(TUNE.HeaderGapRight + TUNE.CloseSize + GIFT_GAP), 0.5, 0),
 	Size = UDim2.fromOffset(TUNE.GiftSize, TUNE.GiftSize), ZIndex = 26, Image = UIAssets.Gift,
 	Hover = 1.03, Press = 0.97,
 })
@@ -1338,6 +1374,66 @@ local function makeCard(parent, item, purchaseType)
 	return card
 end
 
+-- ===================== SIDEWAYS ROWS (touch) =====================
+-- Every sideways card row, so opening the store can start each at card 1.
+local STRIPS = {}
+
+-- A sideways row sits inside the vertical list. A mostly-vertical swipe that
+-- starts on the cards still scrolls the list; if the engine already passes it
+-- on by itself, this notices and steps aside so it never scrolls twice.
+local function chainVerticalDrag(inner, outer)
+	local active, last, expected
+	inner.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			active, last, expected = input, input.Position, outer.CanvasPosition
+		end
+	end)
+	UserInputService.TouchMoved:Connect(function(input)
+		if input ~= active then return end
+		local delta = input.Position - last
+		last = input.Position
+		if (outer.CanvasPosition - expected).Magnitude > 0.5 then
+			active = nil                                  -- the engine is chaining already
+			return
+		end
+		if math.abs(delta.Y) > math.abs(delta.X) then
+			local maxY = math.max(0, outer.AbsoluteCanvasSize.Y - outer.AbsoluteWindowSize.Y)
+			local step = delta.Y / math.max(responsiveScale.Scale, 0.05)
+			outer.CanvasPosition = Vector2.new(outer.CanvasPosition.X, math.clamp(outer.CanvasPosition.Y - step, 0, maxY))
+		end
+		expected = outer.CanvasPosition
+	end)
+	UserInputService.TouchEnded:Connect(function(input)
+		if input == active then active = nil end
+	end)
+end
+
+popup:GetPropertyChangedSignal("Visible"):Connect(function()
+	if not popup.Visible then return end
+	for _, strip in ipairs(STRIPS) do strip.CanvasPosition = Vector2.zero end
+end)
+
+-- Phones: a text minimum written for desktop is bigger than its box once the
+-- window is drawn small, and the text then spills or gets cut. Minimums follow
+-- the window scale there; maximums and desktop are untouched.
+local function applyTextMinimums()
+	if not PHONE_STORE then return end
+	local factor = math.min(1, responsiveScale.Scale)
+	for _, layer in ipairs({ popup, spillLayer }) do
+		for _, limit in ipairs(layer:GetDescendants()) do
+			if limit:IsA("UITextSizeConstraint") then
+				local base = limit:GetAttribute("BaseMin")
+				if base == nil then
+					base = limit.MinTextSize
+					limit:SetAttribute("BaseMin", base)
+				end
+				limit.MinTextSize = math.max(1, math.floor(base * factor))
+			end
+		end
+	end
+end
+responsiveScale:GetPropertyChangedSignal("Scale"):Connect(applyTextMinimums)
+
 -- ===================== SECTION =====================
 local function makeSection(titleText, items, purchaseType, order)
 	local section = frame(scroll, {
@@ -1379,25 +1475,73 @@ local function makeSection(titleText, items, purchaseType, order)
 		})
 	end
 
-	local holder = frame(section, {
-		Name = "Cards", Position = UDim2.fromOffset(0, TUNE.BannerHeight + TUNE.BannerGapBelow),
-		Size = UDim2.new(1, 0, 0, 100), Transparency = 1, ZIndex = 15,
-	})
+	local holder
+	if STRIP_CARDS then
+		-- Touch screens: one sideways row that swipes. Same cards, same art,
+		-- just never squeezed into a grid that crops the buy buttons.
+		holder = Instance.new("ScrollingFrame")
+		holder.Name = "Cards"
+		holder.Position = UDim2.fromOffset(0, TUNE.BannerHeight + TUNE.BannerGapBelow)
+		holder.Size = UDim2.new(1, 0, 0, 100)
+		holder.BackgroundTransparency = 1
+		holder.BorderSizePixel = 0
+		holder.ZIndex = 15
+		holder.ScrollBarThickness = 8
+		holder.ScrollBarImageColor3 = Color3.fromRGB(150, 240, 255)
+		holder.ScrollBarImageTransparency = 0.35
+		holder.HorizontalScrollBarInset = Enum.ScrollBarInset.None
+		holder.CanvasSize = UDim2.new()
+		holder.Parent = section
+		if UiResponsive and UiResponsive.TouchScroll then
+			UiResponsive.TouchScroll(holder, Enum.ScrollingDirection.X)
+		else
+			holder.ScrollingDirection = Enum.ScrollingDirection.X
+		end
+		chainVerticalDrag(holder, scroll)
+		table.insert(STRIPS, holder)
+	else
+		holder = frame(section, {
+			Name = "Cards", Position = UDim2.fromOffset(0, TUNE.BannerHeight + TUNE.BannerGapBelow),
+			Size = UDim2.new(1, 0, 0, 100), Transparency = 1, ZIndex = 15,
+		})
+	end
 
 	local cards = {}
 	for _, item in ipairs(items) do
 		table.insert(cards, makeCard(holder, item, purchaseType))
 	end
 
-	local lastWidth
+	local lastWidth, lastScale
 	local function layout()
 		if popup.Size.X.Offset < 300 then return end   -- mid collapse animation
 		local width = holder.AbsoluteSize.X
 		if width < 10 then return end
 		local scaleNow = math.max(responsiveScale.Scale, 0.05)
 		width /= scaleNow                                    -- design pixels
-		if math.abs(width - (lastWidth or -1e6)) < 0.5 then return end
-		lastWidth = width
+		if math.abs(width - (lastWidth or -1e6)) < 0.5 and scaleNow == lastScale then return end
+		lastWidth, lastScale = width, scaleNow
+
+		if STRIP_CARDS then
+			-- Width from the row itself: whole cards plus a sliver of the next.
+			-- The gap is a screen size (8-14px), turned into design pixels.
+			local gap = math.clamp(TUNE.StripGapPx, 8, 14) / scaleNow
+			local side, top = TUNE.StripPadSide, TUNE.StripPadTop
+			local whole = math.floor(STRIP_CARDS)
+			local w = math.floor((width - side - whole * gap) / STRIP_CARDS)
+			local h = math.floor(w / TUNE.CardRatio)              -- the card keeps its shape
+			local rowWidth = #cards * w + (#cards - 1) * gap
+			-- A row that fits without swiping sits centred instead.
+			local left = if rowWidth + side * 2 <= width then (width - rowWidth) / 2 else side
+			for index, card in ipairs(cards) do
+				card.Position = UDim2.fromOffset(left + (index - 1) * (w + gap), top)
+				card.Size = UDim2.fromOffset(w, h)
+			end
+			local height = top + h + TUNE.StripPadBottom
+			holder.CanvasSize = UDim2.fromOffset(math.max(rowWidth + side * 2, 0), 0)
+			holder.Size = UDim2.new(1, 0, 0, height)
+			section.Size = UDim2.new(1, -8, 0, TUNE.BannerHeight + TUNE.BannerGapBelow + height)
+			return
+		end
 
 		local gap = TUNE.CardGap
 		-- Phones: two bigger, readable cards per row (the list scrolls).
@@ -1432,6 +1576,7 @@ local function makeSection(titleText, items, purchaseType, order)
 
 	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
 	popup:GetPropertyChangedSignal("Size"):Connect(layout)
+	responsiveScale:GetPropertyChangedSignal("Scale"):Connect(layout)
 	task.defer(layout)
 end
 
@@ -1804,6 +1949,7 @@ makeCodesSection()
 -- The Codes section now closes the canvas with its own cloud composition.
 
 task.defer(refreshScrollBar)
+task.defer(applyTextMinimums)
 
 -- ===================== STORE BUTTON =====================
 local function buttonLooksLikeStore(button)

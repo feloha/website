@@ -358,6 +358,16 @@ dialog.Parent = gui
 local dialogScale = Instance.new("UIScale")
 dialogScale.Parent = dialog
 
+-- Nibbles has the top priority on screen: the layout manager moves or
+-- condenses whatever is in the way (the carry card, the event column), and
+-- the tutorial state de-emphasises optional HUD while it shows.
+do
+	local Layout = optionalModule("UILayoutManager")
+	if Layout and Layout.Register then
+		Layout.Register("TutorialDialog", dialog, { Priority = 100, State = "TUTORIAL" })
+	end
+end
+
 -- The panel itself.
 local bubble = Instance.new("Frame")
 bubble.Name = "Bubble"
