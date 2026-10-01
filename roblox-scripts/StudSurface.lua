@@ -1,83 +1,63 @@
--- StudSurface (ModuleScript in ReplicatedStorage)  -- NEW
--- One system for the molded toy-brick stud texture on chunky HUD buttons.
+-- StudSurface (ModuleScript in ReplicatedStorage)
+-- One system for the molded toy-brick studs on chunky HUD buttons.
 -- Client only.
 --
 --   local StudSurface = require(ReplicatedStorage.StudSurface)
---   StudSurface.Apply(face, { Tint = buttonColor, CornerRadius = 23, ZIndex = 1 })
+--   StudSurface.Apply(face, {
+--       Color = buttonColor,          -- the button's own colour
+--       Avoid = { icon },             -- content the studs frame instead of covering
+--       Above = label,                -- optional: studs stay above this object's box
+--   })
 --
--- What one call does to `face` (the button's coloured surface Frame):
---   * adds ONE ImageLabel named "StudOverlay" (re-used on later calls, never
---     stacked), drawing the supplied stud texture TILED, so studs stay round
---     and evenly spaced on any width - never stretched;
---   * inset from the border by about half a stud, and sized to a whole
---     number of studs, centred, so no row is cut off or squeezed at an edge;
---   * rounded with a concentric corner (the face's radius minus the inset),
---     so it follows the curved shape exactly and never covers the stroke;
---   * tinted from the button's own colour (a little richer, so gold reads as
---     gold, not washed-out yellow), and a touch more see-through toward the
---     bottom, where the label sits;
---   * purely visual: Active = false, Interactable = false, an ImageLabel -
---     it never takes a tap and never changes the button's size or hitbox;
---   * stud size follows the HUD's responsive UIScale but is clamped in screen
---     pixels, so phones don't get microscopic studs or desktops huge ones;
---   * deterministic: the pattern starts at the overlay's top-left every time.
--- Hover brightens the studs very slightly; a disabled button dims them.
+-- Why drawn studs: the tiled texture (rbxassetid://140302758156355) rendered
+-- as fine vertical ridges at button size - a texture made of many small
+-- studs cannot be shown at 4-6 studs across without cropping it, and its
+-- layout isn't known here. So every stud is a small, deliberate shape:
 --
--- Layer rule: put it ABOVE the face's gradient and BELOW its gloss, icons and
--- text. In a Sibling-ZIndex ScreenGui a child always draws over its parent,
--- so ZIndex 1 inside the face puts it under the face's gloss children (2+)
--- and under the button's content layer.
+--   Shadow     contact shadow, offset down-right
+--   Body       round, a slightly deeper version of the button colour, lit
+--              from the upper-left (gradient) with a thin darker rim
+--   Cap        the lighter raised top face, nudged up-left
+--   Highlight  a small bright glint, upper-left
+--
+-- Layout, recomputed only when the face or its content actually changes:
+--   * one even grid, centred on the face, ~4-8 studs across, 2-3 rows;
+--   * studs that would sit behind the icon or the label's actual lettering
+--     are left out (never moved), so the grid stays perfectly regular and
+--     the content is framed by it;
+--   * a small/square face (phones, icon-only) gets four corner studs;
+--   * stud size follows the face, with a floor, so they never become dots.
+-- The layer is purely visual: Active = false, Interactable = false. It is a
+-- child of the face, so presses and hover bounces move it with the button.
+--
+-- Set StudSurface.StudImage to an asset id of ONE stud to draw each Body with
+-- that picture instead of shapes (each stays round: Fit, square box).
+-- StudSurface.SHOW_STUD_BOUNDS = true outlines the layer.
 
-local ContentProvider = game:GetService("ContentProvider")
-local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
 
 local StudSurface = {}
-print("[StudSurface] build 2026-10-01c")
+print("[StudSurface] build 2026-10-01d (drawn studs)")
 
-StudSurface.AssetId = "rbxassetid://140302758156355"
-
--- Development only: outlines every StudOverlay so its bounds can be checked
--- against the button (corners, inset, no overflow). Keep false in production.
+StudSurface.AssetId = "rbxassetid://140302758156355"   -- the supplied texture (see above)
+StudSurface.StudImage = nil
 StudSurface.SHOW_STUD_BOUNDS = false
 
+local INK = Color3.fromRGB(20, 28, 65)
+local WHITE = Color3.new(1, 1, 1)
+
 local DEFAULTS = {
-	Transparency = 0.06,      -- clearly visible; the gloss still sits on top
-	HoverTransparency = 0.0,
-	DisabledTransparency = 0.6,
-	TileSize = 15,            -- design px per stud cell (before the HUD's UIScale)
-	-- How many studs ACROSS the supplied image. 1 = the image is one stud
-	-- cell (the usual seamless tile). If the picture is a whole grid of studs
-	-- (e.g. 4 x 4), set 4 and every stud keeps the size above.
-	-- The supplied texture holds a grid of studs (it rendered as fine noise
-	-- at 1), so each repeat of the picture spans this many stud cells.
-	StudsPerTile = 4,
-	MinTilePx = 8,            -- on-screen clamp per stud, phones
-	MaxTilePx = 22,           -- on-screen clamp per stud, large monitors
-	InsetShare = 0.5,         -- edge breathing room, in studs
-	CornerRadius = 0,         -- the face's own radius, in px
-	ZIndex = 1,
-	TintLighten = 0.32,      -- lighter than the face, so the studs stand out of it       -- toward white, so the baked shading still reads
-	TintDeepen = 0.08,        -- toward the colour's own darker shade, for richness
-	LabelFade = 0.12,         -- extra transparency at the bottom (behind the label)
+	ZIndex = 1,               -- under the face's gloss (2+) and the content layer
+	Margin = 9,               -- design px from the face edge to the first stud
+	SizeShare = 0.18,         -- stud diameter as a share of the face's short side
+	MinDiameter = 11,         -- design px; studs never shrink below this
+	MaxDiameter = 17,
+	PitchShare = 1.62,        -- centre-to-centre spacing, in diameters
+	AvoidPad = 3,             -- breathing room around the icon / lettering
 }
 
-local INK = Color3.fromRGB(20, 28, 65)
-
--- Preloaded once, so buttons never appear without studs and then pop them in.
-local preloaded = false
-local function preload()
-	if preloaded then return end
-	preloaded = true
-	task.spawn(function()
-		local probe = Instance.new("ImageLabel")
-		probe.Image = StudSurface.AssetId
-		pcall(function() ContentProvider:PreloadAsync({ probe }) end)
-		probe:Destroy()
-	end)
-end
-
--- Product of the responsive UIScales above (and on) an object.
-local function responsiveScale(object)
+-- Product of every UIScale on the object and its ancestors.
+local function scaleOf(object)
 	local k, node = 1, object
 	while node and not node:IsA("LayerCollector") do
 		for _, child in ipairs(node:GetChildren()) do
@@ -88,132 +68,233 @@ local function responsiveScale(object)
 	return math.max(k, 0.01)
 end
 
-local function tintFor(color, opts)
-	-- A richer version of the surface colour: a little toward white so the
-	-- texture's own highlights survive, and a little toward a deeper shade so
-	-- it never looks chalky.
-	local h, s, v = color:ToHSV()
-	local deep = Color3.fromHSV(h, math.min(1, s * 1.08), v)
-	return deep:Lerp(Color3.new(1, 1, 1), opts.TintLighten):Lerp(color:Lerp(INK, 0.25), opts.TintDeepen)
+local function round(parent, name, size, position, color, z, transparency)
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = position
+	f.Size = size
+	f.BackgroundColor3 = color
+	f.BackgroundTransparency = transparency or 0
+	f.BorderSizePixel = 0
+	f.Active = false
+	f.ZIndex = z
+	f.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0.5, 0)
+	c.Parent = f
+	return f
 end
 
-local function findButton(face)
-	local node = face
-	while node and not node:IsA("LayerCollector") do
-		if node:IsA("GuiButton") then return node end
-		node = node.Parent
+local function buildStud(layer, x, y, d, color)
+	local stud = Instance.new("Frame")
+	stud.Name = "Stud"
+	stud.AnchorPoint = Vector2.new(0.5, 0.5)
+	stud.Position = UDim2.fromOffset(x, y)
+	stud.Size = UDim2.fromOffset(d, d)
+	stud.BackgroundTransparency = 1
+	stud.Active = false
+	stud.ZIndex = 1
+	stud.Parent = layer
+
+	local deep = color:Lerp(INK, 0.16)
+	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.1, 0.5, d * 0.14), INK, 1, 0.5)
+
+	if StudSurface.StudImage then
+		local picture = Instance.new("ImageLabel")
+		picture.Name = "Body"
+		picture.AnchorPoint = Vector2.new(0.5, 0.5)
+		picture.Position = UDim2.fromScale(0.5, 0.5)
+		picture.Size = UDim2.fromScale(1, 1)
+		picture.BackgroundTransparency = 1
+		picture.Image = StudSurface.StudImage
+		picture.ImageColor3 = deep:Lerp(WHITE, 0.2)
+		picture.ScaleType = Enum.ScaleType.Fit
+		picture.Active = false
+		picture.ZIndex = 2
+		picture.Parent = stud
+		return stud
 	end
-	return nil
+
+	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2)
+	local shade = Instance.new("UIGradient")
+	shade.Rotation = 45   -- upper-left light, lower-right shadow
+	shade.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, deep:Lerp(WHITE, 0.34)),
+		ColorSequenceKeypoint.new(0.55, deep),
+		ColorSequenceKeypoint.new(1, deep:Lerp(INK, 0.3)),
+	})
+	shade.Parent = body
+	local rim = Instance.new("UIStroke")
+	rim.Color = color:Lerp(INK, 0.5)
+	rim.Thickness = math.max(1, d * 0.07)
+	rim.Transparency = 0.25
+	rim.Parent = body
+
+	-- The raised top face: lighter, a little up-left of centre.
+	local cap = round(body, "Cap", UDim2.fromScale(0.66, 0.66), UDim2.fromScale(0.46, 0.44), WHITE, 3)
+	local capShade = Instance.new("UIGradient")
+	capShade.Rotation = 45
+	capShade.Color = ColorSequence.new(deep:Lerp(WHITE, 0.42), deep:Lerp(WHITE, 0.08))
+	capShade.Parent = cap
+
+	-- The glint.
+	local glint = round(body, "Highlight", UDim2.fromScale(0.3, 0.19), UDim2.fromScale(0.34, 0.3), WHITE, 4, 0.18)
+	glint.Rotation = -35
+	return stud
+end
+
+-- Design-space rectangle of a content object relative to the face; for a
+-- TextLabel only its actual lettering counts, so short names free up room.
+local function avoidRect(object, face, k, pad)
+	if not (object and object.Parent and object:IsA("GuiObject") and object.Visible) then return nil end
+	if object.AbsoluteSize.X < 1 then return nil end
+	local at = (object.AbsolutePosition - face.AbsolutePosition) / k
+	local size = object.AbsoluteSize / k
+	if object:IsA("TextLabel") then
+		if object.Text == "" then return nil end
+		local textSize = if object.TextScaled then size.Y else object.TextSize
+		local bounds = TextService:GetTextSize(object.Text, textSize, object.Font, Vector2.new(10000, 10000))
+		local w, h = math.min(bounds.X + 6, size.X), math.min(bounds.Y, size.Y)
+		local left
+		if object.TextXAlignment == Enum.TextXAlignment.Left then
+			left = at.X
+		elseif object.TextXAlignment == Enum.TextXAlignment.Right then
+			left = at.X + size.X - w
+		else
+			left = at.X + (size.X - w) / 2
+		end
+		local top = at.Y + (size.Y - h) / 2
+		return { left - pad, top - pad, left + w + pad, top + h + pad }
+	end
+	-- Icon artwork is drawn Fit inside its box; its corners are mostly empty.
+	local inset = size * 0.08
+	return { at.X + inset.X - pad, at.Y + inset.Y - pad, at.X + size.X - inset.X + pad, at.Y + size.Y - inset.Y + pad }
+end
+
+local function circleHitsRect(x, y, r, rect)
+	local nx = math.clamp(x, rect[1], rect[3])
+	local ny = math.clamp(y, rect[2], rect[4])
+	return (x - nx) ^ 2 + (y - ny) ^ 2 < r * r
 end
 
 function StudSurface.Apply(face, options)
 	if not (face and face:IsA("GuiObject")) then return nil end
-	preload()
 	local opts = {}
 	for key, value in pairs(DEFAULTS) do opts[key] = value end
 	for key, value in pairs(options or {}) do opts[key] = value end
+	local color = opts.Color or face.BackgroundColor3
 
-	-- Re-use, never stack.
-	local overlay = face:FindFirstChild("StudOverlay")
-	if not (overlay and overlay:IsA("ImageLabel")) then
-		if overlay then overlay:Destroy() end
-		overlay = Instance.new("ImageLabel")
-		overlay.Name = "StudOverlay"
-		overlay.Parent = face
-	end
-	overlay.BackgroundTransparency = 1
-	overlay.BorderSizePixel = 0
-	overlay.Active = false
-	pcall(function() overlay.Interactable = false end)
-	overlay.Selectable = false
-	overlay.Image = opts.AssetId or StudSurface.AssetId
-	overlay.ScaleType = Enum.ScaleType.Tile
-	overlay.Rotation = 0                       -- one orientation everywhere (light from upper-left)
-	overlay.AnchorPoint = Vector2.new(0.5, 0.5)
-	overlay.Position = UDim2.fromScale(0.5, 0.5)
-	overlay.ZIndex = opts.ZIndex
-	overlay.ImageColor3 = tintFor(opts.Tint or face.BackgroundColor3, opts)
-
-	local corner = overlay:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
-	corner.Parent = overlay
-
-	-- Slightly lighter behind the label at the bottom; seamless, no hard edge.
-	local fade = overlay:FindFirstChild("StudFade") or Instance.new("UIGradient")
-	fade.Name = "StudFade"
-	fade.Rotation = 90
-	fade.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(0.55, opts.LabelFade * 0.4),
-		NumberSequenceKeypoint.new(1, opts.LabelFade),
-	})
-	fade.Parent = overlay
-
-	local bounds = overlay:FindFirstChild("StudBounds")
-	if StudSurface.SHOW_STUD_BOUNDS and not bounds then
-		bounds = Instance.new("UIStroke")
-		bounds.Name = "StudBounds"
-		bounds.Color = Color3.fromRGB(255, 40, 40)
-		bounds.Thickness = 1
-		bounds.Parent = overlay
-	elseif bounds and not StudSurface.SHOW_STUD_BOUNDS then
-		bounds:Destroy()
+	-- One stud system: remove the old tiled texture and any earlier layer.
+	for _, child in ipairs(face:GetChildren()) do
+		if child.Name == "StudOverlay" or child.Name == "StudLayer" then child:Destroy() end
 	end
 
-	-- Size: a whole number of studs, centred, inset from the border.
+	local layer = Instance.new("Frame")
+	layer.Name = "StudLayer"
+	layer.BackgroundTransparency = 1
+	layer.BorderSizePixel = 0
+	layer.Size = UDim2.fromScale(1, 1)
+	layer.Active = false
+	pcall(function() layer.Interactable = false end)
+	layer.ZIndex = opts.ZIndex
+	layer.Parent = face
+	if StudSurface.SHOW_STUD_BOUNDS then
+		local s = Instance.new("UIStroke")
+		s.Color = Color3.fromRGB(255, 40, 40)
+		s.Parent = layer
+	end
+
+	local lastKey = nil
 	local function layout()
-		local k = responsiveScale(face)
-		local size = face.AbsoluteSize / k                -- design px
-		if size.X < 4 or size.Y < 4 then return end
-		local tilePx = math.clamp(opts.TileSize * k, opts.MinTilePx, opts.MaxTilePx)
-		local stud = tilePx / k
-		local inset = stud * opts.InsetShare
-		-- Whole stud cells only, so no row or column is cut at an edge.
-		local columns = math.max(1, math.floor((size.X - inset * 2) / stud))
-		local rows = math.max(1, math.floor((size.Y - inset * 2) / stud))
-		local per = math.max(1, opts.StudsPerTile or 1)
-		overlay.TileSize = UDim2.fromOffset(stud * per, stud * per)
-		overlay.Size = UDim2.fromOffset(columns * stud, rows * stud)
-		corner.CornerRadius = UDim.new(0, math.max((opts.CornerRadius or 0) - inset, 0))
-	end
-	layout()
-	print(("[StudSurface] %s: %dx%d stud area, tile %s, transparency %.2f"):format(
-		face:GetFullName():gsub("^Players%.[^%.]+%.PlayerGui%.", ""), overlay.Size.X.Offset, overlay.Size.Y.Offset,
-		tostring(overlay.TileSize), opts.Transparency))
-	if not overlay:GetAttribute("StudWired") then
-		overlay:SetAttribute("StudWired", true)
-		face:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
+		if not layer.Parent then return end
+		local k = scaleOf(face)
+		local size = face.AbsoluteSize / k
+		if size.X < 8 or size.Y < 8 then return end
+		local W, H = size.X, size.Y
+		local d = math.clamp(math.min(W, H) * opts.SizeShare, opts.MinDiameter, opts.MaxDiameter)
+		local r = d / 2
+		local pitch = d * opts.PitchShare
+		local margin = opts.Margin
 
-		-- Hover and disabled follow the real button; the studs move with the
-		-- face (they are its child), so presses and bounces carry them along.
-		local button = findButton(face)
-		local hovering = false
-		local function enabled()
-			if not button then return true end
-			local ok, value = pcall(function() return button.Interactable end)
-			return button.Active and not (ok and value == false)
+		-- The band the grid lives in: the whole face, or only above the label
+		-- (so every button gets the same studs whatever its name's length).
+		local top, bottom = margin, H - margin
+		local above = opts.Above
+		if above and above.Parent and above.Visible and above.AbsoluteSize.Y > 1 then
+			bottom = math.min(bottom, (above.AbsolutePosition.Y - face.AbsolutePosition.Y) / k - 1)
 		end
-		local function refresh(animated)
-			local goal = if not enabled() then opts.DisabledTransparency
-				elseif hovering then opts.HoverTransparency else opts.Transparency
-			if animated then
-				TweenService:Create(overlay, TweenInfo.new(0.14, Enum.EasingStyle.Quad), { ImageTransparency = goal }):Play()
-			else
-				overlay.ImageTransparency = goal
+		local bandH = math.max(bottom - top, d)
+
+		local avoid = {}
+		for _, object in ipairs(opts.Avoid or {}) do
+			local rect = avoidRect(object, face, k, opts.AvoidPad)
+			if rect then table.insert(avoid, rect) end
+		end
+
+		-- Even grid, centred. Rows may sit a little closer than columns (never
+		-- closer than 1.38 diameters), so a short band still gets two rows.
+		local columns = math.max(1, math.floor((W - 2 * margin - d) / pitch) + 1)
+		local rows = math.max(1, math.floor((bandH - d) / (d * 1.38)) + 1)
+		local pitchY = if rows > 1 then math.min(pitch, (bandH - d) / (rows - 1)) else 0
+		local x0 = (W - (columns - 1) * pitch) / 2
+		local y0 = top + (bandH - (rows - 1) * pitchY) / 2
+		local spots = {}
+		for row = 0, rows - 1 do
+			for column = 0, columns - 1 do
+				local x, y = x0 + column * pitch, y0 + row * pitchY
+				local free = true
+				for _, rect in ipairs(avoid) do
+					if circleHitsRect(x, y, r, rect) then free = false break end
+				end
+				if free then table.insert(spots, { x, y }) end
 			end
 		end
-		refresh(false)
-		if button then
-			button.MouseEnter:Connect(function() hovering = true refresh(true) end)
-			button.MouseLeave:Connect(function() hovering = false refresh(true) end)
-			button:GetPropertyChangedSignal("Active"):Connect(function() refresh(true) end)
-			pcall(function()
-				button:GetPropertyChangedSignal("Interactable"):Connect(function() refresh(true) end)
-			end)
+		-- Small square faces (icon-only on phones): four corner studs.
+		local dd = d
+		if #spots < 4 then
+			dd = math.max(opts.MinDiameter * 0.85, d * 0.78)
+			local c = margin + dd / 2
+			spots = { { c, c }, { W - c, c }, { c, H - c }, { W - c, H - c } }
 		end
-	else
-		overlay.ImageTransparency = opts.Transparency
+
+		local parts = { math.floor(W + 0.5), math.floor(H + 0.5), math.floor(dd * 10) }
+		for _, spot in ipairs(spots) do
+			table.insert(parts, math.floor(spot[1]) .. "," .. math.floor(spot[2]))
+		end
+		local key = table.concat(parts, "|")
+		if key == lastKey then return end
+		lastKey = key
+
+		for _, child in ipairs(layer:GetChildren()) do
+			if child.Name == "Stud" then child:Destroy() end
+		end
+		for _, spot in ipairs(spots) do
+			buildStud(layer, spot[1], spot[2], dd, color)
+		end
 	end
-	return overlay
+
+	local queued = false
+	local function schedule()
+		if queued then return end
+		queued = true
+		task.defer(function()
+			queued = false
+			layout()
+		end)
+	end
+	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
+	local watched = table.clone(opts.Avoid or {})
+	if opts.Above then table.insert(watched, opts.Above) end
+	for _, object in ipairs(watched) do
+		if object and object:IsA("GuiObject") then
+			object:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
+			object:GetPropertyChangedSignal("Visible"):Connect(schedule)
+			if object:IsA("TextLabel") then object:GetPropertyChangedSignal("TextSize"):Connect(schedule) end
+		end
+	end
+	schedule()
+	return layer
 end
 
 return StudSurface

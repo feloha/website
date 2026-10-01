@@ -657,22 +657,14 @@ local function buildCohesiveNav(text,color,iconId)
 	local line=Instance.new("UIStroke");line.Thickness=3.3;line.Color=ink;line.Parent=face
 	local gradient=Instance.new("UIGradient");gradient.Rotation=90
 	gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,color:Lerp(Color3.new(1,1,1),.35)),ColorSequenceKeypoint.new(.34,color:Lerp(Color3.new(1,1,1),.1)),ColorSequenceKeypoint.new(1,color:Lerp(ink,.1))});gradient.Parent=face
-	-- Molded studs: above the face's gradient, under its gloss (ZIndex 2-3)
-	-- and under the icon and label (the content layer on the button).
-	do
-		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
-		local ok, StudSurface = pcall(function() return module and require(module) end)
-		if ok and type(StudSurface) == "table" then
-			StudSurface.Apply(face, { Tint = color, CornerRadius = 23, ZIndex = 1 })
-		end
-	end
 	-- A broad curved reflection, not a thin horizontal streak.
 	local inset=Instance.new("Frame");inset.Name="CandyInset";inset.BackgroundTransparency=1
 	inset.Position=UDim2.fromOffset(7,5);inset.Size=UDim2.new(1,-14,1,-11);inset.ZIndex=2;inset.Parent=face
 	local insetCorner=Instance.new("UICorner");insetCorner.CornerRadius=UDim.new(0,18);insetCorner.Parent=inset
 	local insetLine=Instance.new("UIStroke");insetLine.Color=color:Lerp(Color3.new(1,1,1),.65);insetLine.Thickness=1.6;insetLine.Transparency=.32;insetLine.Parent=inset
 	local reflection=Instance.new("Frame");reflection.Name="SoftReflection";reflection.BackgroundColor3=Color3.new(1,1,1)
-	reflection.BackgroundTransparency=.85;reflection.BorderSizePixel=0;reflection.Position=UDim2.fromOffset(10,7);reflection.Size=UDim2.new(1,-20,.31,0);reflection.ZIndex=2;reflection.Parent=face
+	-- Restrained: an upper-left sheen only, so it complements the studs.
+	reflection.BackgroundTransparency=.85;reflection.BorderSizePixel=0;reflection.Position=UDim2.fromOffset(10,7);reflection.Size=UDim2.new(.5,-10,.24,0);reflection.ZIndex=2;reflection.Parent=face
 	local reflectionCorner=Instance.new("UICorner");reflectionCorner.CornerRadius=UDim.new(1,0);reflectionCorner.Parent=reflection
 	local reflectionFade=Instance.new("UIGradient");reflectionFade.Rotation=90;reflectionFade.Transparency=NumberSequence.new(0,1);reflectionFade.Parent=reflection
 	-- Elliptical glints and four-point stars are GUI shapes, not external image assets.
@@ -704,15 +696,7 @@ local function buildCohesiveNav(text,color,iconId)
 		})
 		soften.Parent=dot
 	end
-	local starColor=color:Lerp(Color3.fromRGB(255,255,209),.72)
-	for i,spec in ipairs({{.2,.48,13},{.8,.38,13},{.87,.58,8}}) do
-		local star=Instance.new("Frame");star.Name="StardustSparkle"..i;star.BackgroundTransparency=1
-		star.AnchorPoint=Vector2.new(.5,.5);star.Position=UDim2.fromScale(spec[1],spec[2]);star.Size=UDim2.fromOffset(spec[3],spec[3]);star.ZIndex=3;star.Parent=face
-		shape(star,"Vertical",.5,.5,spec[3]*.35,spec[3],starColor,0,.08)
-		shape(star,"Horizontal",.5,.5,spec[3],spec[3]*.35,starColor,0,.08)
-		local core=shape(star,"Diamond",.5,.5,spec[3]*.58,spec[3]*.58,starColor,45,.08)
-		core:FindFirstChildOfClass("UICorner").CornerRadius=UDim.new(.18,0)
-	end
+	-- The small "+" sparkles are gone: the studs are the surface detail now.
 	local content=Instance.new("Frame");content.Name="NavContent";content.BackgroundTransparency=1
 	content.Position=UDim2.fromOffset(4,0);content.Size=UDim2.new(1,-8,1,0);content.ZIndex=3;content.Parent=btn
 	local label=Instance.new("TextLabel");label.Name="Label";label.BackgroundTransparency=1
@@ -747,6 +731,16 @@ local function buildCohesiveNav(text,color,iconId)
 		image.Image=iconId;image.ScaleType=Enum.ScaleType.Fit
 		image.ImageColor3=Color3.fromRGB(255,255,255)
 		image.ZIndex=3;image.Parent=icon
+	end
+	-- Molded studs: on the coloured face, above its gradient, under its rim
+	-- light and gloss, and under the icon and name (the content layer). One
+	-- even grid above the name, framing the icon - identical on all five.
+	do
+		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
+		local ok, StudSurface = pcall(function() return module and require(module) end)
+		if ok and type(StudSurface) == "table" and StudSurface.Apply then
+			StudSurface.Apply(face, { Color = color, Avoid = { content:FindFirstChild("Icon") }, Above = label })
+		end
 	end
 	local scale=Instance.new("UIScale");scale.Parent=btn
 	local hover,down=false,false
