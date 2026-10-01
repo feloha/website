@@ -8,7 +8,7 @@
 --   * Nibbles talks from a speech bubble at the bottom of the screen, moves up
 --     while the carry card is showing, and shrinks to a small hint while a
 --     popup (like UPGRADE) is open. Everything hides during the attack camera.
---   * Skippable at any time. Replay it from the Nibbles button, bottom-left.
+--   * Skippable at any time.
 --     Completion is saved by TutorialServer.
 --
 -- Presentation only: it reads attributes and remotes the game already has and
@@ -1023,8 +1023,11 @@ do
 	buttonGui.IgnoreGuiInset = true
 	buttonGui.DisplayOrder = 5
 	buttonGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	buttonGui.Parent = playerGui
-	replayButton.Parent = buttonGui
+	-- Removed from the HUD on request: the button is never parented, so it
+	-- has no hitbox and takes no space anywhere (the old layer is cleared
+	-- above and not rebuilt). The code that positions it is harmless.
+	buttonGui:Destroy()
+	replayButton.Parent = nil
 	-- Phones: steps aside while a window is open, like the rest of the HUD.
 	if GuiManager and GuiManager.Changed then
 		local function refresh()
@@ -1605,11 +1608,11 @@ local steps = {
 	{
 		title = "You're a natural!",
 		emotion = "Blushing",
-		body = "That's all you need. Tap me down in the corner any time to see this again. Now go grow HUGE!",
+		body = "That's all you need. Now go grow HUGE!",
 		button = "LET'S PLAY!",
 		final = true,
 		update = function()
-			return false, nil, { gui = replayButton }
+			return false, nil, nil
 		end,
 	},
 }

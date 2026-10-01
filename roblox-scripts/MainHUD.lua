@@ -654,6 +654,15 @@ local function buildCohesiveNav(text,color,iconId)
 	local line=Instance.new("UIStroke");line.Thickness=3.3;line.Color=ink;line.Parent=face
 	local gradient=Instance.new("UIGradient");gradient.Rotation=90
 	gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,color:Lerp(Color3.new(1,1,1),.35)),ColorSequenceKeypoint.new(.34,color:Lerp(Color3.new(1,1,1),.1)),ColorSequenceKeypoint.new(1,color:Lerp(ink,.1))});gradient.Parent=face
+	-- Molded studs: above the face's gradient, under its gloss (ZIndex 2-3)
+	-- and under the icon and label (the content layer on the button).
+	do
+		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
+		local ok, StudSurface = pcall(function() return module and require(module) end)
+		if ok and type(StudSurface) == "table" then
+			StudSurface.Apply(face, { Tint = color, CornerRadius = 23, ZIndex = 1 })
+		end
+	end
 	-- A broad curved reflection, not a thin horizontal streak.
 	local inset=Instance.new("Frame");inset.Name="CandyInset";inset.BackgroundTransparency=1
 	inset.Position=UDim2.fromOffset(7,5);inset.Size=UDim2.new(1,-14,1,-11);inset.ZIndex=2;inset.Parent=face
@@ -3402,7 +3411,7 @@ actionBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeTopActions)
 -- one is open the gameplay HUD steps aside - action grid, top buttons,
 -- Playtime and the status column - so the window is the only thing competing
 -- for the small screen. The currencies stay (you see what you can spend).
--- Settings and the tutorial button follow the same rule in their scripts.
+-- Settings follows the same rule in their scripts.
 local function refreshModalHud()
 	local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
 	local open = phone and GuiManager:GetCurrent() ~= nil
@@ -3419,11 +3428,17 @@ task.defer(placeTopActions)
 
 -- ===== stardust placement =====
 -- Desktop and tablets: right under the side menu, as marked. If there's no
--- room above the tutorial button there (short windows), it sits at the bottom
--- edge beside that button instead. Phones: under the 2x2 menu grid in the
+-- room there (short windows), it tucks up toward the menu, clear of the bottom
+-- edge. Phones: under the 2x2 menu grid in the
 -- top-left, well away from the thumbstick.
 local GuiService = game:GetService("GuiService")
-local TUTORIAL_RESERVE = 84   -- the tutorial (Nibbles) button, bottom-left
+-- Room kept clear at the bottom edge. (This used to be 84 for the small
+-- Nibbles button bottom-left; that button is gone, so only a margin is left.)
+local BOTTOM_MARGIN = 12
+-- Where Gems sits under Stardust, as a share of the spare width between them:
+-- 0 = same left edge, 0.5 = centred. A little left of centre reads as one
+-- compact cluster.
+local GEMS_SHIFT = 0.2
 
 local function placeStardust()
 	local screen = camera.ViewportSize
@@ -3449,17 +3464,17 @@ local function placeStardust()
 	local total = height + GEMS_GAP + gemsSize.Y
 	local x = math.max(menuLeft - CLUSTER_NUDGE * pixel, screen.X * 0.015)
 	local y = menuBottom + gap + (if compact then 0 else 4 * pixel)
-	-- Always under Inventory and above the tutorial button. On short windows
+	-- Always under Inventory, clear of the bottom edge. On short windows
 	-- the gaps tighten first, then the cluster tucks up toward the menu.
-	if not compact and y + total > screen.Y - TUTORIAL_RESERVE then
+	if not compact and y + total > screen.Y - BOTTOM_MARGIN then
 		GEMS_GAP = 4 * pixel
 		total = height + GEMS_GAP + gemsSize.Y
-		y = math.max(screen.Y - TUTORIAL_RESERVE - total, menuBottom + 4)
+		y = math.max(screen.Y - BOTTOM_MARGIN - total, menuBottom + 4)
 	end
 	top.Position = UDim2.fromOffset(math.floor(x + 0.5), math.floor(y + 0.5))
-	-- Desktop: Gems centred under Stardust. Phones: one left edge for the
+	-- Desktop: Gems a little left of centre under Stardust. Phones: one left edge for the
 	-- whole left zone (grid, Stardust, Gems).
-	local gemsX = if compact then x else x + (width - gemsSize.X) / 2
+	local gemsX = if compact then x else x + (width - gemsSize.X) * GEMS_SHIFT
 	gemsPill.Position = UDim2.fromOffset(
 		math.floor(gemsX + 0.5),
 		math.floor(y + height + GEMS_GAP + gemsSize.Y / 2 + 0.5))
