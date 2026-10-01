@@ -313,7 +313,7 @@ end
 
 -- ===== main ScreenGui =====
 -- If Output doesn't show this line, an older copy of MainHUD is running.
-print("[MainHUD] build 2026-10-01f  (molded studded nav + Playtime Awards)")
+print("[MainHUD] build 2026-10-01g  (reference pass: nav + Playtime)")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
@@ -654,13 +654,19 @@ local POP_OUT = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.
 local NAV = {
 	Radius = 28,           -- one corner radius for face, lip and shadow
 	Lip = 7,               -- px of dark thickness under the face
-	Rim = 4.6,             -- navy outer rim
+	Rim = 4.8,             -- navy outer rim
 	InnerInset = 5,
-	IconSize = Vector2.new(64, 54),
-	IconTop = 3,
-	LabelHeight = 30,
-	LabelSize = 30,        -- shrinks only for long names (Leaderboards)
-	LabelBottom = 5,
+	InnerLine = 2.6,       -- the bright inner rim
+	IconSize = Vector2.new(74, 58),
+	IconTop = 2,
+	LabelHeight = 32,
+	LabelSize = 31,        -- shrinks only for long names (Leaderboards)
+	LabelBottom = 4,
+	TextStroke = 4,
+	StreakSize = Vector2.new(40, 8),
+	-- "+" marks in the stud grid's gaps: { gap column, gap row, size };
+	-- a negative column counts from the right.
+	Marks = { { 1, 1, 15 }, { -1, 0, 15 }, { -1, 1, 9 } },
 }
 -- spec (optional) overrides NAV for a differently sized tile (Playtime
 -- Awards): Width, DisplayText, Plus = { {x, y, size}, ... }, Stud = {...}.
@@ -701,20 +707,7 @@ local function buildCohesiveNav(text,color,iconId,spec)
 	local inner=Instance.new("Frame");inner.Name="InnerRim";inner.BackgroundTransparency=1;inner.Active=false
 	inner.Position=UDim2.fromOffset(N.InnerInset,N.InnerInset);inner.Size=UDim2.new(1,-N.InnerInset*2,1,-N.InnerInset*2);inner.ZIndex=3;inner.Parent=face
 	local innerCorner=Instance.new("UICorner");innerCorner.CornerRadius=UDim.new(0,N.Radius-N.InnerInset);innerCorner.Parent=inner
-	local innerLine=Instance.new("UIStroke");innerLine.Color=color:Lerp(white,.62);innerLine.Thickness=2.2;innerLine.Transparency=.08;innerLine.Parent=inner
-	-- "+" marks printed on the plastic: two large, one small.
-	local function plus(x,y,size,alpha)
-		local p=Instance.new("Frame");p.Name="Plus";p.BackgroundTransparency=1;p.Active=false
-		p.AnchorPoint=Vector2.new(.5,.5);p.Position=UDim2.fromScale(x,y);p.Size=UDim2.fromOffset(size,size);p.ZIndex=4;p.Parent=face
-		for _,horizontal in ipairs({true,false}) do
-			local bar=Instance.new("Frame");bar.Active=false;bar.BorderSizePixel=0;bar.AnchorPoint=Vector2.new(.5,.5)
-			bar.Position=UDim2.fromScale(.5,.5);bar.Size=if horizontal then UDim2.new(1,0,.34,0) else UDim2.new(.34,0,1,0)
-			bar.BackgroundColor3=color:Lerp(white,.78);bar.BackgroundTransparency=alpha;bar.ZIndex=4;bar.Parent=p
-			local c=Instance.new("UICorner");c.CornerRadius=UDim.new(.5,0);c.Parent=bar
-		end
-	end
-	-- In the gaps of the stud grid, one each side, level with the second row.
-	for _,mark in ipairs(N.Plus or {{.17,.5,15},{.83,.5,15}}) do plus(mark[1],mark[2],mark[3],.08) end
+	local innerLine=Instance.new("UIStroke");innerLine.Color=color:Lerp(white,.62);innerLine.Thickness=N.InnerLine;innerLine.Transparency=.04;innerLine.Parent=inner
 	-- The big glossy reflection, upper-left, over the studs.
 	local gloss=Instance.new("Frame");gloss.Name="Gloss";gloss.Active=false;gloss.BorderSizePixel=0
 	gloss.BackgroundColor3=white;gloss.BackgroundTransparency=.62
@@ -723,10 +716,15 @@ local function buildCohesiveNav(text,color,iconId,spec)
 	local glossFade=Instance.new("UIGradient");glossFade.Rotation=35
 	glossFade.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(.5,.55),NumberSequenceKeypoint.new(1,1)});glossFade.Parent=gloss
 	local streak=Instance.new("Frame");streak.Name="GlossStreak";streak.Active=false;streak.BorderSizePixel=0
-	streak.AnchorPoint=Vector2.new(.5,.5);streak.Position=UDim2.fromScale(.14,.22);streak.Size=UDim2.fromOffset(38,7);streak.Rotation=-32
+	streak.AnchorPoint=Vector2.new(.5,.5);streak.Position=UDim2.fromScale(.14,.22);streak.Size=UDim2.fromOffset(N.StreakSize.X,N.StreakSize.Y);streak.Rotation=-32
 	streak.BackgroundColor3=white;streak.BackgroundTransparency=.2;streak.ZIndex=6;streak.Parent=face
 	local streakCorner=Instance.new("UICorner");streakCorner.CornerRadius=UDim.new(.5,0);streakCorner.Parent=streak
 	local taper=Instance.new("UIGradient");taper.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(.5,0),NumberSequenceKeypoint.new(1,1)});taper.Parent=streak
+	-- The small round glint just under the streak.
+	local dot=Instance.new("Frame");dot.Name="GlossDot";dot.Active=false;dot.BorderSizePixel=0;dot.AnchorPoint=Vector2.new(.5,.5)
+	dot.Position=UDim2.fromScale(.075,.36);dot.Size=UDim2.fromOffset(N.StreakSize.Y,N.StreakSize.Y)
+	dot.BackgroundColor3=white;dot.BackgroundTransparency=.3;dot.ZIndex=6;dot.Parent=face
+	local dotCorner=Instance.new("UICorner");dotCorner.CornerRadius=UDim.new(.5,0);dotCorner.Parent=dot
 	-- Content: icon upper middle, name lower middle.
 	local content=Instance.new("Frame");content.Name="NavContent";content.BackgroundTransparency=1;content.Active=false
 	content.Position=UDim2.fromOffset(4,0);content.Size=UDim2.new(1,-8,1,0);content.ZIndex=3;content.Parent=btn
@@ -738,7 +736,7 @@ local function buildCohesiveNav(text,color,iconId,spec)
 	local measure=game:GetService("TextService")
 	while fontSize>18 and measure:GetTextSize(label.Text,fontSize,Enum.Font.FredokaOne,Vector2.new(1000,1000)).X>(N.Width or NAV_SLOT.X)-30 do fontSize-=1 end
 	label.TextSize=fontSize
-	local stroke=Instance.new("UIStroke");stroke.Color=ink;stroke.Thickness=3.4;stroke.LineJoinMode=Enum.LineJoinMode.Round;stroke.Parent=label
+	local stroke=Instance.new("UIStroke");stroke.Color=ink;stroke.Thickness=N.TextStroke;stroke.LineJoinMode=Enum.LineJoinMode.Round;stroke.Parent=label
 	if iconId and iconId~="" then
 		-- Exactly one artwork per button, untinted and never stretched (Fit).
 		-- The scale evens out the PNGs' different aspect ratios.
@@ -773,7 +771,10 @@ local function buildCohesiveNav(text,color,iconId,spec)
 		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
 		local ok, StudSurface = pcall(function() return module and require(module) end)
 		if ok and type(StudSurface) == "table" and StudSurface.Apply then
-			local studOptions = { Color = color, Label = label, Margin = N.InnerInset + 5 }
+			local studOptions = {
+				Color = color, Label = label, Icon = content:FindFirstChild("Icon"),
+				Margin = N.InnerInset + 5, CornerRadius = N.Radius, RimInset = N.InnerInset, Marks = N.Marks,
+			}
 			for key, value in pairs(N.Stud or {}) do studOptions[key] = value end
 			StudSurface.Apply(face, studOptions)
 		end
@@ -1275,17 +1276,21 @@ local playShadow = addShadow(playSlot)
 -- Playtime Awards: the same molded, studded plastic as the side menu (the
 -- old one-piece PNG had the gift and lettering baked in, so studs could not
 -- go behind them). Gift icon and name sit on the studs.
-local PLAYTIME_TILE = Vector2.new(274, 206)   -- the size knob for this button
+local PLAYTIME_TILE = Vector2.new(288, 200)   -- the size knob; the reference's ~1.44:1
 playSlot.Size = UDim2.fromOffset(PLAYTIME_TILE.X, PLAYTIME_TILE.Y)
-local playBtn = buildCohesiveNav("Playtime Awards", THEME.Playtime, "rbxassetid://126373776467964", {
+-- The full-colour gift (cream box, red bow, gold star). UIAssets.PlaytimeGift
+-- wins if you add one; otherwise the Store's gift artwork.
+local PLAYTIME_GIFT = UIAssets.PlaytimeGift or UIAssets.Gift or "rbxassetid://126373776467964"
+local playBtn = buildCohesiveNav("Playtime Awards", THEME.Playtime, PLAYTIME_GIFT, {
 	Width = PLAYTIME_TILE.X,
-	Radius = 40, Lip = 9, Rim = 5, InnerInset = 6,
-	IconSize = Vector2.new(150, 112), IconTop = 10,
-	LabelHeight = 76, LabelSize = 36, LabelBottom = 10,
+	Radius = 40, Lip = 10, Rim = 6, InnerInset = 6, InnerLine = 3,
+	IconSize = Vector2.new(160, 104), IconTop = 14,
+	LabelHeight = 78, LabelSize = 38, LabelBottom = 8, TextStroke = 4.6,
 	DisplayText = "Playtime\nAwards",
-	-- In the grid gaps either side of the gift.
-	Plus = { { 0.2, 0.255, 20 }, { 0.8, 0.255, 20 } },
-	Stud = { Margin = 14, MaxDiameter = 26, MaxColumns = 5, MaxRows = 4 },
+	StreakSize = Vector2.new(60, 12),
+	-- Gift and name stay clear; studs frame them, as in the reference.
+	Stud = { Margin = 12, SizeShare = 0.085, MinDiameter = 12, MaxDiameter = 18, MaxColumns = 9, MaxRows = 6, Behind = "hide" },
+	Marks = { { 1, 2, 22 }, { -2, 1, 22 }, { -1, 2, 13 } },
 })
 playBtn.Parent = playSlot
 -- The tile draws its own shadow and lip.
@@ -3266,13 +3271,6 @@ end
 local function setIconOnly(iconOnly)
 	for _, item in ipairs(menuButtons) do
 		if item.label then item.label.Visible = not iconOnly end
-		-- Small square phone buttons: the studs alone, no "+" marks.
-		local face = item.slot:FindFirstChild("Face", true)
-		if face then
-			for _, mark in ipairs(face:GetChildren()) do
-				if mark.Name == "Plus" then mark.Visible = not iconOnly end
-			end
-		end
 		if item.icon then
 			item.icon.AnchorPoint = if iconOnly then Vector2.new(0.5, 0.5) else item.iconAnchor
 			item.icon.Position = if iconOnly then UDim2.fromScale(0.5, 0.5) else item.iconPosition

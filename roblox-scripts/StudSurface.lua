@@ -1,44 +1,45 @@
 -- StudSurface (ModuleScript in ReplicatedStorage)
--- One system for the molded toy-brick studs on chunky HUD buttons.
+-- The one system for molded toy-brick studs on chunky HUD buttons.
 -- Client only.
 --
 --   local StudSurface = require(ReplicatedStorage.StudSurface)
 --   StudSurface.Apply(face, {
---       Color = buttonColor,          -- the button's own colour
---       Icon = iconFrame,             -- content that sits ON the studs
---       Label = nameLabel,
+--       Color = buttonColor,            -- the button's own plastic colour
+--       Icon = iconFrame, Label = nameLabel,
+--       CornerRadius = 28, RimInset = 5, -- the face's curve and inner rim
+--       Behind = "fade",                -- or "hide": what studs under content do
+--       Marks = { { 1, 1, 14 } },       -- "+" marks: { gap column, gap row, size }
 --   })
 --
--- Why drawn studs: the tiled texture (rbxassetid://140302758156355) rendered
--- as fine vertical ridges at button size - a texture made of many small
--- studs cannot be shown at 4-6 studs across without cropping it, and its
--- layout isn't known here. So every stud is a small, deliberate shape:
---
+-- Each stud is drawn, not a texture (the tiled texture rbxassetid://140302758156355
+-- rendered as fine ridges at button size):
 --   Shadow     contact shadow in a darker shade of the same plastic, down-right
 --   Body       the button's own colour, lit upper-left, shaded lower-right,
 --              with a faint rim - molded from the face, not glued on
 --   Highlight  a soft white crescent on the upper-left shoulder
 --
--- Layout, recomputed only when the face or its content actually changes:
---   * one even grid over the whole face, edge to edge, up to 7 across and
---     2-3 rows; the icon and name sit ON it;
---   * only studs that would land right behind the lettering or the icon's
---     centre are left out (never moved), so the grid stays regular;
---   * a small/square face (phones, icon-only) gets four corner studs;
---   * stud size follows the face, with a floor, so they never become dots.
--- The layer is purely visual: Active = false, Interactable = false. It is a
--- child of the face, so presses and hover bounces move it with the button.
+-- Layout (recomputed only when the tile's design size or its name changes -
+-- never during hover / press, so nothing blinks):
+--   * one even grid, edge to edge, perfectly symmetric left/right;
+--   * studs that would cross the rounded inner rim at a corner are dropped;
+--   * studs under the content: "fade" keeps every grid position (no gaps)
+--     and presses those behind the name back; "hide" leaves the gift / name
+--     clear, as on the Playtime Awards reference. Either way the decision is
+--     mirrored, so both sides always match;
+--   * "+" marks sit exactly in the gaps between four studs;
+--   * faces smaller than MinFace (a tiny phone gear) get no studs at all.
+-- Every part is Active = false and a child of the face, so presses and hover
+-- bounces carry it and it never takes a tap.
 --
--- Set StudSurface.StudImage to an asset id of ONE stud to draw each Body with
--- that picture instead of shapes (each stays round: Fit, square box).
--- StudSurface.SHOW_STUD_BOUNDS = true outlines the layer.
+-- StudSurface.StudImage: an asset id of ONE stud draws each Body with that
+-- picture instead (kept round). SHOW_STUD_BOUNDS outlines the layer.
 
 local TextService = game:GetService("TextService")
 
 local StudSurface = {}
-print("[StudSurface] build 2026-10-01f (no gaps, no hover rebuild)")
+print("[StudSurface] build 2026-10-01g (reference pass)")
 
-StudSurface.AssetId = "rbxassetid://140302758156355"   -- the supplied texture (see above)
+StudSurface.AssetId = "rbxassetid://140302758156355"
 StudSurface.StudImage = nil
 StudSurface.SHOW_STUD_BOUNDS = false
 
@@ -46,17 +47,24 @@ local INK = Color3.fromRGB(20, 28, 65)
 local WHITE = Color3.new(1, 1, 1)
 
 local DEFAULTS = {
-	ZIndex = 1,               -- under the face's gloss (2+) and the content layer
-	Margin = 9,               -- design px from the face edge to the first stud's edge
-	SizeShare = 0.19,         -- stud diameter as a share of the face's short side
-	MinDiameter = 12,         -- design px; studs never shrink below this
+	ZIndex = 1,               -- under the face's rim light, gloss and the content
+	Margin = 10,              -- design px from the face edge to the first stud's edge
+	SizeShare = 0.15,         -- stud diameter as a share of the face's short side
+	MinDiameter = 12,
 	MaxDiameter = 20,
-	MinScreenPx = 10,         -- and never below this on screen (phones)
-	PitchShare = 1.85,        -- centre-to-centre spacing, in diameters
-	MaxColumns = 7,
+	MinScreenPx = 9,          -- never smaller than this on screen
+	PitchShare = 1.75,        -- centre-to-centre, in diameters
+	MaxColumns = 9,
+	MaxRows = 4,
+	MinFace = 50,             -- smaller faces: no studs
+	CornerRadius = 0,
+	RimInset = 0,
+	Behind = "fade",
+	IconCore = 0.8,           -- share of the icon box that counts as the artwork
+	AvoidPad = 1.5,
+	MarksMinWidth = 120,
 }
 
--- Product of every UIScale on the object and its ancestors.
 local function scaleOf(object)
 	local k, node = 1, object
 	while node and not node:IsA("LayerCollector") do
@@ -100,9 +108,6 @@ local function buildStud(layer, x, y, d, color, faded)
 	square.AspectRatio = 1
 	square.Parent = stud
 
-	-- Contact shadow: a darker version of the same plastic, down-right.
-	-- Behind the lettering a stud stays in the grid (no gaps) but is pressed
-	-- back, so the name reads cleanly on top of it.
 	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.07, 0.5, d * 0.11), color:Lerp(INK, 0.5), 1,
 		if faded then 0.82 else 0.45)
 
@@ -115,6 +120,7 @@ local function buildStud(layer, x, y, d, color, faded)
 		picture.BackgroundTransparency = 1
 		picture.Image = StudSurface.StudImage
 		picture.ImageColor3 = color
+		picture.ImageTransparency = if faded then 0.55 else 0
 		picture.ScaleType = Enum.ScaleType.Fit
 		picture.Active = false
 		picture.ZIndex = 2
@@ -122,8 +128,6 @@ local function buildStud(layer, x, y, d, color, faded)
 		return stud
 	end
 
-	-- Body: molded from the button's own plastic - lit edge upper-left,
-	-- the face colour through the middle, a soft shade lower-right.
 	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2, if faded then 0.55 else 0)
 	local shade = Instance.new("UIGradient")
 	shade.Rotation = 45
@@ -139,8 +143,8 @@ local function buildStud(layer, x, y, d, color, faded)
 	rim.Transparency = if faded then 0.85 else 0.55
 	rim.Parent = body
 
-	-- Glint: a soft white crescent on the upper-left shoulder.
-	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3, if faded then 0.75 else 0.3)
+	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3,
+		if faded then 0.75 else 0.3)
 	glint.Rotation = -38
 	local fade = Instance.new("UIGradient")
 	fade.Rotation = 90
@@ -149,15 +153,42 @@ local function buildStud(layer, x, y, d, color, faded)
 	return stud
 end
 
--- Design-space rectangles relative to the face.
+-- A "+" printed on the plastic: a light tint of the button colour.
+local function buildMark(layer, x, y, size, color)
+	local mark = Instance.new("Frame")
+	mark.Name = "Plus"
+	mark.AnchorPoint = Vector2.new(0.5, 0.5)
+	mark.Position = UDim2.fromOffset(x, y)
+	mark.Size = UDim2.fromOffset(size, size)
+	mark.BackgroundTransparency = 1
+	mark.Active = false
+	mark.ZIndex = 3
+	mark.Parent = layer
+	for _, horizontal in ipairs({ true, false }) do
+		local bar = Instance.new("Frame")
+		bar.Active = false
+		bar.BorderSizePixel = 0
+		bar.AnchorPoint = Vector2.new(0.5, 0.5)
+		bar.Position = UDim2.fromScale(0.5, 0.5)
+		bar.Size = if horizontal then UDim2.new(1, 0, 0.34, 0) else UDim2.new(0.34, 0, 1, 0)
+		bar.BackgroundColor3 = color:Lerp(WHITE, 0.8)
+		bar.BackgroundTransparency = 0.06
+		bar.ZIndex = 3
+		bar.Parent = mark
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.5, 0)
+		c.Parent = bar
+	end
+end
+
+-- Rectangles relative to the face, in design px.
 local function localRect(object, face, k)
 	if not (object and object.Parent and object:IsA("GuiObject") and object.Visible) then return nil end
 	if object.AbsoluteSize.X < 1 then return nil end
 	return (object.AbsolutePosition - face.AbsolutePosition) / k, object.AbsoluteSize / k
 end
 
--- The label's actual lettering (not its whole box), so short names keep
--- the studs beside them.
+-- The label's actual lettering, not its whole box.
 local function textRect(label, face, k)
 	if not (label and label:IsA("TextLabel")) or label.Text == "" then return nil end
 	local at, size = localRect(label, face, k)
@@ -172,6 +203,19 @@ local function textRect(label, face, k)
 	return { left, top, left + w, top + h }
 end
 
+local function coreRect(object, face, k, share)
+	local at, size = localRect(object, face, k)
+	if not at then return nil end
+	local inset = size * (1 - share) / 2
+	return { at.X + inset.X, at.Y + inset.Y, at.X + size.X - inset.X, at.Y + size.Y - inset.Y }
+end
+
+local function circleHits(x, y, r, rect)
+	local nx = math.clamp(x, rect[1], rect[3])
+	local ny = math.clamp(y, rect[2], rect[4])
+	return (x - nx) ^ 2 + (y - ny) ^ 2 < r * r
+end
+
 function StudSurface.Apply(face, options)
 	if not (face and face:IsA("GuiObject")) then return nil end
 	local opts = {}
@@ -179,7 +223,7 @@ function StudSurface.Apply(face, options)
 	for key, value in pairs(options or {}) do opts[key] = value end
 	local color = opts.Color or face.BackgroundColor3
 
-	-- One stud system: remove the old tiled texture and any earlier layer.
+	-- One stud system: drop the old tiled texture and any earlier layer.
 	for _, child in ipairs(face:GetChildren()) do
 		if child.Name == "StudOverlay" or child.Name == "StudLayer" then child:Destroy() end
 	end
@@ -206,47 +250,82 @@ function StudSurface.Apply(face, options)
 		local k = scaleOf(face)
 		local size = face.AbsoluteSize / k
 		if size.X < 8 or size.Y < 8 then return end
-		-- Hover / press only rescale the button: its design size is unchanged,
-		-- so nothing is rebuilt (that rebuild is what made studs blink).
 		local W, H = math.floor(size.X + 0.5), math.floor(size.Y + 0.5)
 		if not force and math.abs(W - lastW) <= 3 and math.abs(H - lastH) <= 3 then return end
 		lastW, lastH = W, H
+
+		local spots, marks = {}, {}
 		local d = math.clamp(math.min(W, H) * opts.SizeShare, opts.MinDiameter, opts.MaxDiameter)
 		d = math.max(d, opts.MinScreenPx / k)
 		local r = d / 2
-		local margin = opts.Margin
+		if math.min(W, H) >= opts.MinFace then
+			local margin = opts.Margin
+			local spanX = W - 2 * margin - d
+			local spanY = H - 2 * margin - d
+			local columns = math.clamp(math.floor(spanX / (d * opts.PitchShare)) + 1, 2, opts.MaxColumns)
+			local rows = math.clamp(math.floor(spanY / (d * 1.4)) + 1, 1, opts.MaxRows)
+			local pitchX = spanX / (columns - 1)
+			local pitchY = if rows > 1 then spanY / (rows - 1) else 0
+			local x0 = margin + r
+			local y0 = if rows > 1 then margin + r else H / 2
 
-		-- One even grid over the whole face. Columns spread edge to edge at
-		-- about PitchShare diameters apart (fewer on small faces, so the
-		-- studs stay big); rows may be a little closer than columns.
-		local spanX = W - 2 * margin - d
-		local spanY = H - 2 * margin - d
-		local columns = math.clamp(math.floor(spanX / (d * opts.PitchShare)) + 1, 2, opts.MaxColumns)
-		local rows = math.clamp(math.floor(spanY / (d * 1.4)) + 1, 1, opts.MaxRows or 99)
-		local pitchX = spanX / math.max(columns - 1, 1)
-		local pitchY = if rows > 1 then spanY / (rows - 1) else 0
-		local x0, y0 = margin + r, margin + r
-		if rows == 1 then y0 = H / 2 end
-
-		-- Every grid position gets a stud, so there are never gaps. The icon
-		-- simply sits on top; studs right behind the lettering are pressed
-		-- back (faded) so the name stays clean.
-		local labelRect = textRect(opts.Label, face, k)
-		local spots = {}
-		for row = 0, rows - 1 do
-			for column = 0, columns - 1 do
-				local x, y = x0 + column * pitchX, y0 + row * pitchY
-				local faded = labelRect ~= nil and x > labelRect[1] and x < labelRect[3]
-					and y > labelRect[2] and y < labelRect[4]
-				table.insert(spots, { x, y, faded })
+			-- Inside the rounded inner rim (corner studs that would cross it go).
+			local R = opts.CornerRadius
+			local limit = R - opts.RimInset - 2
+			local function insideCurve(x, y)
+				if R <= 0 then return true end
+				local cx = math.clamp(x, R, W - R)
+				local cy = math.clamp(y, R, H - R)
+				if math.abs(x - cx) < 1e-3 and math.abs(y - cy) < 1e-3 then return true end
+				return math.sqrt((x - cx) ^ 2 + (y - cy) ^ 2) + r <= limit
 			end
-		end
-		-- Mirror the fading left-right, so a name that is a hair off-centre
-		-- never fades one side's stud and not the other's.
-		for _, spot in ipairs(spots) do
-			for _, other in ipairs(spots) do
-				if math.abs(other[2] - spot[2]) < 0.5 and math.abs((W - other[1]) - spot[1]) < 0.5 and other[3] then
-					spot[3] = true
+
+			local labelRect = textRect(opts.Label, face, k)
+			local iconRect = if opts.Behind == "hide" then coreRect(opts.Icon, face, k, opts.IconCore) else nil
+			local pad = opts.AvoidPad
+			local function covered(x, y)
+				if labelRect and circleHits(x, y, r + pad, labelRect) then return true end
+				if iconRect and circleHits(x, y, r + pad, iconRect) then return true end
+				return false
+			end
+
+			local grid = {}
+			for row = 0, rows - 1 do
+				grid[row] = {}
+				for column = 0, columns - 1 do
+					local x, y = x0 + column * pitchX, y0 + row * pitchY
+					grid[row][column] = { x = x, y = y, keep = insideCurve(x, y), under = covered(x, y) }
+				end
+			end
+			-- Mirror the content decision left/right, so both sides match.
+			for row = 0, rows - 1 do
+				for column = 0, columns - 1 do
+					local cell, twin = grid[row][column], grid[row][columns - 1 - column]
+					cell.under = cell.under or twin.under
+				end
+			end
+			for row = 0, rows - 1 do
+				for column = 0, columns - 1 do
+					local cell = grid[row][column]
+					if cell.keep then
+						if not cell.under then
+							table.insert(spots, { cell.x, cell.y, false })
+						elseif opts.Behind ~= "hide" then
+							table.insert(spots, { cell.x, cell.y, true })
+						end
+					end
+				end
+			end
+
+			-- "+" marks: centred in the gap between four studs. A negative gap
+			-- column counts from the right (-1 = the last gap).
+			if W >= opts.MarksMinWidth and rows > 1 then
+				for _, mark in ipairs(opts.Marks or {}) do
+					local gc = if mark[1] < 0 then columns - 1 + mark[1] else mark[1]
+					local gr = math.clamp(mark[2], 0, rows - 2)
+					if gc >= 0 and gc <= columns - 2 then
+						table.insert(marks, { x0 + (gc + 0.5) * pitchX, y0 + (gr + 0.5) * pitchY, mark[3] })
+					end
 				end
 			end
 		end
@@ -255,15 +334,21 @@ function StudSurface.Apply(face, options)
 		for _, spot in ipairs(spots) do
 			table.insert(parts, math.floor(spot[1]) .. "," .. math.floor(spot[2]) .. (if spot[3] then "f" else ""))
 		end
+		for _, mark in ipairs(marks) do
+			table.insert(parts, "+" .. math.floor(mark[1]) .. "," .. math.floor(mark[2]))
+		end
 		local key = table.concat(parts, "|")
 		if key == lastKey then return end
 		lastKey = key
 
 		for _, child in ipairs(layer:GetChildren()) do
-			if child.Name == "Stud" then child:Destroy() end
+			if child.Name == "Stud" or child.Name == "Plus" then child:Destroy() end
 		end
 		for _, spot in ipairs(spots) do
 			buildStud(layer, spot[1], spot[2], d, color, spot[3])
+		end
+		for _, mark in ipairs(marks) do
+			buildMark(layer, mark[1], mark[2], mark[3], color)
 		end
 	end
 
@@ -280,13 +365,15 @@ function StudSurface.Apply(face, options)
 		end)
 	end
 	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() schedule(false) end)
-	-- Content changes that really move things (phone icon-only mode, a new
-	-- name): never their size flickering during a hover tween.
 	local label = opts.Label
 	if label and label:IsA("TextLabel") then
 		for _, property in ipairs({ "Visible", "Text", "TextSize" }) do
 			label:GetPropertyChangedSignal(property):Connect(function() schedule(true) end)
 		end
+	end
+	local icon = opts.Icon
+	if icon and icon:IsA("GuiObject") then
+		icon:GetPropertyChangedSignal("Size"):Connect(function() schedule(true) end)
 	end
 	schedule(true)
 	return layer

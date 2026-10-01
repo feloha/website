@@ -133,6 +133,87 @@ local iconRatio = Instance.new("UIAspectRatioConstraint")
 iconRatio.AspectRatio = 1
 iconRatio.Parent = gearIcon
 
+-- Same molded-plastic language as the side menu and Playtime Awards, kept
+-- simpler (it is a utility button): navy rim, a dark lip under the face, a
+-- light inner rim, top-lit plastic, four studs and a small gloss. All of it
+-- is decoration only - the gear button keeps every click.
+do
+	local BLUE = Color3.fromRGB(64, 156, 255)
+	local INK = Color3.fromRGB(18, 24, 62)
+	local WHITE = Color3.new(1, 1, 1)
+	gearBtn.BackgroundColor3 = WHITE
+	local shade = gearBtn:FindFirstChildOfClass("UIGradient")
+	if shade then
+		shade.Rotation = 90
+		shade.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, BLUE:Lerp(WHITE, 0.3)),
+			ColorSequenceKeypoint.new(0.42, BLUE:Lerp(WHITE, 0.06)),
+			ColorSequenceKeypoint.new(1, BLUE:Lerp(INK, 0.08)),
+		})
+	end
+	local rim = gearBtn:FindFirstChildOfClass("UIStroke")
+	if rim then rim.Color = INK; rim.Thickness = 4.8 end
+	-- The old flat shadow becomes the lip; a soft shadow sits under it.
+	gearShadow.Position = UDim2.fromOffset(0, 6)
+	gearShadow.BackgroundColor3 = BLUE:Lerp(INK, 0.62)
+	gearShadow.BackgroundTransparency = 0
+	local lipLine = Instance.new("UIStroke")
+	lipLine.Color = INK
+	lipLine.Thickness = 4.8
+	lipLine.Parent = gearShadow
+	local soft = gearShadow:Clone()
+	soft.Name = "DropShadow"
+	soft:ClearAllChildren()
+	GuiStyle.Corner(soft, 0.3)
+	soft.Position = UDim2.fromOffset(0, 11)
+	soft.BackgroundColor3 = INK
+	soft.BackgroundTransparency = 0.62
+	soft.ZIndex = 19
+	soft.Parent = gearHolder
+
+	local inner = Instance.new("Frame")
+	inner.Name = "InnerRim"
+	inner.BackgroundTransparency = 1
+	inner.Active = false
+	inner.Position = UDim2.fromOffset(4, 4)
+	inner.Size = UDim2.new(1, -8, 1, -8)
+	inner.ZIndex = 2
+	inner.Parent = gearBtn
+	local innerCorner = Instance.new("UICorner")
+	innerCorner.CornerRadius = UDim.new(0.26, 0)
+	innerCorner.Parent = inner
+	local innerLine = Instance.new("UIStroke")
+	innerLine.Color = BLUE:Lerp(WHITE, 0.62)
+	innerLine.Thickness = 2.4
+	innerLine.Transparency = 0.04
+	innerLine.Parent = inner
+
+	local streak = Instance.new("Frame")
+	streak.Name = "GlossStreak"
+	streak.Active = false
+	streak.BorderSizePixel = 0
+	streak.AnchorPoint = Vector2.new(0.5, 0.5)
+	streak.Position = UDim2.fromScale(0.27, 0.2)
+	streak.Size = UDim2.fromOffset(20, 6)
+	streak.Rotation = -38
+	streak.BackgroundColor3 = WHITE
+	streak.BackgroundTransparency = 0.2
+	streak.ZIndex = 3
+	streak.Parent = gearBtn
+	local streakCorner = Instance.new("UICorner")
+	streakCorner.CornerRadius = UDim.new(0.5, 0)
+	streakCorner.Parent = streak
+
+	local module = ReplicatedStorage:FindFirstChild("StudSurface")
+	local ok, StudSurface = pcall(function() return module and require(module) end)
+	if ok and type(StudSurface) == "table" and StudSurface.Apply then
+		StudSurface.Apply(gearBtn, {
+			Color = BLUE, Icon = gearIcon, CornerRadius = 20, RimInset = 4,
+			SizeShare = 0.17, MaxColumns = 2, MaxRows = 2, MinFace = 56, Marks = {},
+		})
+	end
+end
+
 gearBtn.MouseEnter:Connect(function()
 	play(hoverSound)
 	TweenService:Create(gearScale, GuiStyle.HOVER_IN, { Scale = 1.09 }):Play()
