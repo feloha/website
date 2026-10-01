@@ -5,8 +5,8 @@
 --   local StudSurface = require(ReplicatedStorage.StudSurface)
 --   StudSurface.Apply(face, {
 --       Color = buttonColor,          -- the button's own colour
---       Avoid = { icon },             -- content the studs frame instead of covering
---       Above = label,                -- optional: studs stay above this object's box
+--       Icon = iconFrame,             -- content that sits ON the studs
+--       Label = nameLabel,
 --   })
 --
 -- Why drawn studs: the tiled texture (rbxassetid://140302758156355) rendered
@@ -14,17 +14,16 @@
 -- studs cannot be shown at 4-6 studs across without cropping it, and its
 -- layout isn't known here. So every stud is a small, deliberate shape:
 --
---   Shadow     contact shadow, offset down-right
---   Body       round, a slightly deeper version of the button colour, lit
---              from the upper-left (gradient) with a thin darker rim
---   Cap        the lighter raised top face, nudged up-left
---   Highlight  a small bright glint, upper-left
+--   Shadow     contact shadow in a darker shade of the same plastic, down-right
+--   Body       the button's own colour, lit upper-left, shaded lower-right,
+--              with a faint rim - molded from the face, not glued on
+--   Highlight  a soft white crescent on the upper-left shoulder
 --
 -- Layout, recomputed only when the face or its content actually changes:
---   * one even grid, centred on the face, ~4-8 studs across, 2-3 rows;
---   * studs that would sit behind the icon or the label's actual lettering
---     are left out (never moved), so the grid stays perfectly regular and
---     the content is framed by it;
+--   * one even grid over the whole face, edge to edge, up to 7 across and
+--     2-3 rows; the icon and name sit ON it;
+--   * only studs that would land right behind the lettering or the icon's
+--     centre are left out (never moved), so the grid stays regular;
 --   * a small/square face (phones, icon-only) gets four corner studs;
 --   * stud size follows the face, with a floor, so they never become dots.
 -- The layer is purely visual: Active = false, Interactable = false. It is a
@@ -37,7 +36,7 @@
 local TextService = game:GetService("TextService")
 
 local StudSurface = {}
-print("[StudSurface] build 2026-10-01d (drawn studs)")
+print("[StudSurface] build 2026-10-01e (molded studs, full face)")
 
 StudSurface.AssetId = "rbxassetid://140302758156355"   -- the supplied texture (see above)
 StudSurface.StudImage = nil
@@ -48,12 +47,13 @@ local WHITE = Color3.new(1, 1, 1)
 
 local DEFAULTS = {
 	ZIndex = 1,               -- under the face's gloss (2+) and the content layer
-	Margin = 9,               -- design px from the face edge to the first stud
-	SizeShare = 0.18,         -- stud diameter as a share of the face's short side
-	MinDiameter = 11,         -- design px; studs never shrink below this
-	MaxDiameter = 17,
-	PitchShare = 1.62,        -- centre-to-centre spacing, in diameters
-	AvoidPad = 3,             -- breathing room around the icon / lettering
+	Margin = 9,               -- design px from the face edge to the first stud's edge
+	SizeShare = 0.19,         -- stud diameter as a share of the face's short side
+	MinDiameter = 12,         -- design px; studs never shrink below this
+	MaxDiameter = 20,
+	MinScreenPx = 10,         -- and never below this on screen (phones)
+	PitchShare = 1.85,        -- centre-to-centre spacing, in diameters
+	MaxColumns = 7,
 }
 
 -- Product of every UIScale on the object and its ancestors.
@@ -96,9 +96,12 @@ local function buildStud(layer, x, y, d, color)
 	stud.Active = false
 	stud.ZIndex = 1
 	stud.Parent = layer
+	local square = Instance.new("UIAspectRatioConstraint")   -- always a circle
+	square.AspectRatio = 1
+	square.Parent = stud
 
-	local deep = color:Lerp(INK, 0.16)
-	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.1, 0.5, d * 0.14), INK, 1, 0.5)
+	-- Contact shadow: a darker version of the same plastic, down-right.
+	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.07, 0.5, d * 0.11), color:Lerp(INK, 0.5), 1, 0.45)
 
 	if StudSurface.StudImage then
 		local picture = Instance.new("ImageLabel")
@@ -108,7 +111,7 @@ local function buildStud(layer, x, y, d, color)
 		picture.Size = UDim2.fromScale(1, 1)
 		picture.BackgroundTransparency = 1
 		picture.Image = StudSurface.StudImage
-		picture.ImageColor3 = deep:Lerp(WHITE, 0.2)
+		picture.ImageColor3 = color
 		picture.ScaleType = Enum.ScaleType.Fit
 		picture.Active = false
 		picture.ZIndex = 2
@@ -116,66 +119,63 @@ local function buildStud(layer, x, y, d, color)
 		return stud
 	end
 
+	-- Body: molded from the button's own plastic - lit edge upper-left,
+	-- the face colour through the middle, a soft shade lower-right.
 	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2)
 	local shade = Instance.new("UIGradient")
-	shade.Rotation = 45   -- upper-left light, lower-right shadow
+	shade.Rotation = 45
 	shade.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, deep:Lerp(WHITE, 0.34)),
-		ColorSequenceKeypoint.new(0.55, deep),
-		ColorSequenceKeypoint.new(1, deep:Lerp(INK, 0.3)),
+		ColorSequenceKeypoint.new(0, color:Lerp(WHITE, 0.5)),
+		ColorSequenceKeypoint.new(0.4, color:Lerp(WHITE, 0.08)),
+		ColorSequenceKeypoint.new(1, color:Lerp(INK, 0.2)),
 	})
 	shade.Parent = body
 	local rim = Instance.new("UIStroke")
-	rim.Color = color:Lerp(INK, 0.5)
-	rim.Thickness = math.max(1, d * 0.07)
-	rim.Transparency = 0.25
+	rim.Color = color:Lerp(INK, 0.35)
+	rim.Thickness = math.max(1, d * 0.05)
+	rim.Transparency = 0.55
 	rim.Parent = body
 
-	-- The raised top face: lighter, a little up-left of centre.
-	local cap = round(body, "Cap", UDim2.fromScale(0.66, 0.66), UDim2.fromScale(0.46, 0.44), WHITE, 3)
-	local capShade = Instance.new("UIGradient")
-	capShade.Rotation = 45
-	capShade.Color = ColorSequence.new(deep:Lerp(WHITE, 0.42), deep:Lerp(WHITE, 0.08))
-	capShade.Parent = cap
-
-	-- The glint.
-	local glint = round(body, "Highlight", UDim2.fromScale(0.3, 0.19), UDim2.fromScale(0.34, 0.3), WHITE, 4, 0.18)
-	glint.Rotation = -35
+	-- Glint: a soft white crescent on the upper-left shoulder.
+	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3, 0.3)
+	glint.Rotation = -38
+	local fade = Instance.new("UIGradient")
+	fade.Rotation = 90
+	fade.Transparency = NumberSequence.new(0, 0.7)
+	fade.Parent = glint
 	return stud
 end
 
--- Design-space rectangle of a content object relative to the face; for a
--- TextLabel only its actual lettering counts, so short names free up room.
-local function avoidRect(object, face, k, pad)
+-- Design-space rectangles relative to the face.
+local function localRect(object, face, k)
 	if not (object and object.Parent and object:IsA("GuiObject") and object.Visible) then return nil end
 	if object.AbsoluteSize.X < 1 then return nil end
-	local at = (object.AbsolutePosition - face.AbsolutePosition) / k
-	local size = object.AbsoluteSize / k
-	if object:IsA("TextLabel") then
-		if object.Text == "" then return nil end
-		local textSize = if object.TextScaled then size.Y else object.TextSize
-		local bounds = TextService:GetTextSize(object.Text, textSize, object.Font, Vector2.new(10000, 10000))
-		local w, h = math.min(bounds.X + 6, size.X), math.min(bounds.Y, size.Y)
-		local left
-		if object.TextXAlignment == Enum.TextXAlignment.Left then
-			left = at.X
-		elseif object.TextXAlignment == Enum.TextXAlignment.Right then
-			left = at.X + size.X - w
-		else
-			left = at.X + (size.X - w) / 2
-		end
-		local top = at.Y + (size.Y - h) / 2
-		return { left - pad, top - pad, left + w + pad, top + h + pad }
-	end
-	-- Icon artwork is drawn Fit inside its box; its corners are mostly empty.
-	local inset = size * 0.08
-	return { at.X + inset.X - pad, at.Y + inset.Y - pad, at.X + size.X - inset.X + pad, at.Y + size.Y - inset.Y + pad }
+	return (object.AbsolutePosition - face.AbsolutePosition) / k, object.AbsoluteSize / k
 end
 
-local function circleHitsRect(x, y, r, rect)
-	local nx = math.clamp(x, rect[1], rect[3])
-	local ny = math.clamp(y, rect[2], rect[4])
-	return (x - nx) ^ 2 + (y - ny) ^ 2 < r * r
+-- The label's actual lettering (not its whole box), so short names keep
+-- the studs beside them.
+local function textRect(label, face, k)
+	if not (label and label:IsA("TextLabel")) or label.Text == "" then return nil end
+	local at, size = localRect(label, face, k)
+	if not at then return nil end
+	local textSize = if label.TextScaled then size.Y else label.TextSize
+	local bounds = TextService:GetTextSize(label.Text, textSize, label.Font, Vector2.new(10000, 10000))
+	local w, h = math.min(bounds.X + 4, size.X), math.min(bounds.Y * 0.8, size.Y)
+	local left = at.X + (size.X - w) / 2
+	if label.TextXAlignment == Enum.TextXAlignment.Left then left = at.X end
+	if label.TextXAlignment == Enum.TextXAlignment.Right then left = at.X + size.X - w end
+	local top = at.Y + (size.Y - h) / 2
+	return { left, top, left + w, top + h }
+end
+
+-- The middle `share` of an object's box (icon art is drawn Fit and its
+-- edges are mostly empty, so studs may peek out around it).
+local function coreRect(object, face, k, share)
+	local at, size = localRect(object, face, k)
+	if not at then return nil end
+	local inset = size * (1 - share) / 2
+	return { at.X + inset.X, at.Y + inset.Y, at.X + size.X - inset.X, at.Y + size.Y - inset.Y }
 end
 
 function StudSurface.Apply(face, options)
@@ -213,39 +213,37 @@ function StudSurface.Apply(face, options)
 		if size.X < 8 or size.Y < 8 then return end
 		local W, H = size.X, size.Y
 		local d = math.clamp(math.min(W, H) * opts.SizeShare, opts.MinDiameter, opts.MaxDiameter)
+		d = math.max(d, opts.MinScreenPx / k)
 		local r = d / 2
-		local pitch = d * opts.PitchShare
 		local margin = opts.Margin
 
-		-- The band the grid lives in: the whole face, or only above the label
-		-- (so every button gets the same studs whatever its name's length).
-		local top, bottom = margin, H - margin
-		local above = opts.Above
-		if above and above.Parent and above.Visible and above.AbsoluteSize.Y > 1 then
-			bottom = math.min(bottom, (above.AbsolutePosition.Y - face.AbsolutePosition.Y) / k - 1)
-		end
-		local bandH = math.max(bottom - top, d)
+		-- One even grid over the whole face. Columns spread edge to edge at
+		-- about PitchShare diameters apart (fewer on small faces, so the
+		-- studs stay big); rows may be a little closer than columns.
+		local spanX = W - 2 * margin - d
+		local spanY = H - 2 * margin - d
+		local columns = math.clamp(math.floor(spanX / (d * opts.PitchShare)) + 1, 2, opts.MaxColumns)
+		local rows = math.max(1, math.floor(spanY / (d * 1.4)) + 1)
+		local pitchX = spanX / math.max(columns - 1, 1)
+		local pitchY = if rows > 1 then spanY / (rows - 1) else 0
+		local x0, y0 = margin + r, margin + r
+		if rows == 1 then y0 = H / 2 end
 
-		local avoid = {}
-		for _, object in ipairs(opts.Avoid or {}) do
-			local rect = avoidRect(object, face, k, opts.AvoidPad)
-			if rect then table.insert(avoid, rect) end
-		end
+		-- The content sits ON the studs; only studs that would land right
+		-- behind the lettering, or behind the icon's centre, are left out.
+		local keepOut = {}
+		local labelRect = textRect(opts.Label, face, k)
+		if labelRect then table.insert(keepOut, labelRect) end
+		local iconRect = coreRect(opts.Icon, face, k, 0.5)
+		if iconRect then table.insert(keepOut, iconRect) end
 
-		-- Even grid, centred. Rows may sit a little closer than columns (never
-		-- closer than 1.38 diameters), so a short band still gets two rows.
-		local columns = math.max(1, math.floor((W - 2 * margin - d) / pitch) + 1)
-		local rows = math.max(1, math.floor((bandH - d) / (d * 1.38)) + 1)
-		local pitchY = if rows > 1 then math.min(pitch, (bandH - d) / (rows - 1)) else 0
-		local x0 = (W - (columns - 1) * pitch) / 2
-		local y0 = top + (bandH - (rows - 1) * pitchY) / 2
 		local spots = {}
 		for row = 0, rows - 1 do
 			for column = 0, columns - 1 do
-				local x, y = x0 + column * pitch, y0 + row * pitchY
+				local x, y = x0 + column * pitchX, y0 + row * pitchY
 				local free = true
-				for _, rect in ipairs(avoid) do
-					if circleHitsRect(x, y, r, rect) then free = false break end
+				for _, rect in ipairs(keepOut) do
+					if x > rect[1] and x < rect[3] and y > rect[2] and y < rect[4] then free = false break end
 				end
 				if free then table.insert(spots, { x, y }) end
 			end
@@ -284,9 +282,8 @@ function StudSurface.Apply(face, options)
 		end)
 	end
 	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
-	local watched = table.clone(opts.Avoid or {})
-	if opts.Above then table.insert(watched, opts.Above) end
-	for _, object in ipairs(watched) do
+	local watched = { opts.Icon, opts.Label }
+	for _, object in pairs(watched) do
 		if object and object:IsA("GuiObject") then
 			object:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
 			object:GetPropertyChangedSignal("Visible"):Connect(schedule)

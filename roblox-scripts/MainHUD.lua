@@ -52,6 +52,9 @@ end
 -- ===== responsive scaling =====
 local camera = workspace.CurrentCamera
 local DESIGN = Vector2.new(1280, 720)
+-- The left navigation buttons (desktop / tablet): one size for all five.
+local NAV_SLOT = Vector2.new(208, 86)
+local NAV_GAP = 15
 local MIN_SCALE, MAX_SCALE = 0.45, 1
 
 local scaleMultipliers = {}   -- [GuiObject] = extra factor (set by the phone layout)
@@ -310,7 +313,7 @@ end
 
 -- ===== main ScreenGui =====
 -- If Output doesn't show this line, an older copy of MainHUD is running.
-print("[MainHUD] build 2026-10-01d  (drawn studs on menu buttons, Gems left-aligned under Stardust)")
+print("[MainHUD] build 2026-10-01e  (molded studded nav buttons, Gems left-aligned under Stardust)")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
@@ -637,91 +640,105 @@ local top, gemsPill = buildCurrencyHud()
 local POP_IN = TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 local POP_OUT = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
--- Star-gloss navigation v5: illustrated highlights and original Stardust motifs.
+-- Molded toy-brick navigation v6. Built as a physical piece, back to front:
+--   DropShadow   soft shadow under the whole piece
+--   Lip          the piece's thickness: a dark lower edge below the face
+--   Face         the bright plastic top, framed by a thick navy rim
+--     InnerRim   a crisp light line just inside the rim
+--     StudLayer  molded studs in the face's own colour (StudSurface)
+--     Plus       a few "+" marks printed on the plastic
+--     Gloss      the big upper-left reflection, over the studs
+--   NavContent   icon (upper middle) and name (lower middle), on top
+-- Every visual layer is Active = false; only the button takes input, and its
+-- bounds are exactly the slot.
+local NAV = {
+	Radius = 28,           -- one corner radius for face, lip and shadow
+	Lip = 7,               -- px of dark thickness under the face
+	Rim = 4.6,             -- navy outer rim
+	InnerInset = 5,
+	IconSize = Vector2.new(64, 54),
+	IconTop = 3,
+	LabelHeight = 30,
+	LabelSize = 30,        -- shrinks only for long names (Leaderboards)
+	LabelBottom = 5,
+}
 local function buildCohesiveNav(text,color,iconId)
-	local palette={Store=Color3.fromRGB(255,194,22),Leaderboards=Color3.fromRGB(0,214,214),Index=Color3.fromRGB(25,119,255),Rebirth=Color3.fromRGB(177,53,247),Inventory=Color3.fromRGB(255,137,29)}
+	-- Brighter, cleaner plastic than before (reference colours).
+	local palette={Store=Color3.fromRGB(255,203,28),Leaderboards=Color3.fromRGB(22,220,226),Index=Color3.fromRGB(38,130,255),Rebirth=Color3.fromRGB(184,70,250),Inventory=Color3.fromRGB(255,146,36)}
 	color=palette[text] or color
-	local ink=Color3.fromRGB(20,28,65)
+	local ink=Color3.fromRGB(18,24,62)
+	local white=Color3.new(1,1,1)
 	local btn=Instance.new("TextButton")
 	btn.Name=text;btn.Text="";btn.BackgroundTransparency=1;btn.AutoButtonColor=false
 	btn.AnchorPoint=Vector2.new(.5,.5);btn.Position=UDim2.fromScale(.5,.5);btn.Size=UDim2.fromScale(1,1);btn.ZIndex=2
-	local function plate(name,y,tint,z)
+	local function plate(name,y,tint,z,parent)
 		local frame=Instance.new("Frame");frame.Name=name;frame.Position=UDim2.fromOffset(0,y);frame.Size=UDim2.fromScale(1,1)
-		frame.BackgroundColor3=tint;frame.BorderSizePixel=0;frame.ZIndex=z;frame.Parent=btn
-		local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,23);c.Parent=frame
+		frame.BackgroundColor3=tint;frame.BorderSizePixel=0;frame.ZIndex=z;frame.Active=false;frame.Parent=parent or btn
+		local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,NAV.Radius);c.Parent=frame
 		return frame
 	end
-	local shadow=plate("Shadow",8,ink,0);shadow.BackgroundTransparency=.5
-	local edge=plate("Extrusion",5,color:Lerp(ink,.4),1)
+	-- Depth: soft shadow, then the dark lip the face sits on.
+	local shadow=plate("DropShadow",NAV.Lip+5,ink,0);shadow.BackgroundTransparency=.62
+	local lip=plate("Lip",NAV.Lip,color:Lerp(ink,.62),1)
+	local lipLine=Instance.new("UIStroke");lipLine.Thickness=NAV.Rim;lipLine.Color=ink;lipLine.Parent=lip
+	-- The face: thick navy rim, bright top fading to the rich colour.
 	local face=plate("Face",0,Color3.new(1,1,1),2)
-	local line=Instance.new("UIStroke");line.Thickness=3.3;line.Color=ink;line.Parent=face
+	local rim=Instance.new("UIStroke");rim.Thickness=NAV.Rim;rim.Color=ink;rim.Parent=face
 	local gradient=Instance.new("UIGradient");gradient.Rotation=90
-	gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,color:Lerp(Color3.new(1,1,1),.35)),ColorSequenceKeypoint.new(.34,color:Lerp(Color3.new(1,1,1),.1)),ColorSequenceKeypoint.new(1,color:Lerp(ink,.1))});gradient.Parent=face
-	-- A broad curved reflection, not a thin horizontal streak.
-	local inset=Instance.new("Frame");inset.Name="CandyInset";inset.BackgroundTransparency=1
-	inset.Position=UDim2.fromOffset(7,5);inset.Size=UDim2.new(1,-14,1,-11);inset.ZIndex=2;inset.Parent=face
-	local insetCorner=Instance.new("UICorner");insetCorner.CornerRadius=UDim.new(0,18);insetCorner.Parent=inset
-	local insetLine=Instance.new("UIStroke");insetLine.Color=color:Lerp(Color3.new(1,1,1),.65);insetLine.Thickness=1.6;insetLine.Transparency=.32;insetLine.Parent=inset
-	local reflection=Instance.new("Frame");reflection.Name="SoftReflection";reflection.BackgroundColor3=Color3.new(1,1,1)
-	-- Restrained: an upper-left sheen only, so it complements the studs.
-	reflection.BackgroundTransparency=.85;reflection.BorderSizePixel=0;reflection.Position=UDim2.fromOffset(10,7);reflection.Size=UDim2.new(.5,-10,.24,0);reflection.ZIndex=2;reflection.Parent=face
-	local reflectionCorner=Instance.new("UICorner");reflectionCorner.CornerRadius=UDim.new(1,0);reflectionCorner.Parent=reflection
-	local reflectionFade=Instance.new("UIGradient");reflectionFade.Rotation=90;reflectionFade.Transparency=NumberSequence.new(0,1);reflectionFade.Parent=reflection
-	-- Elliptical glints and four-point stars are GUI shapes, not external image assets.
-	local function shape(parent,name,x,y,w,h,tint,rotation,alpha)
-		local p=Instance.new("Frame");p.Name=name;p.AnchorPoint=Vector2.new(.5,.5)
-		p.Position=UDim2.fromScale(x,y);p.Size=UDim2.fromOffset(w,h);p.BorderSizePixel=0
-		p.BackgroundColor3=tint;p.BackgroundTransparency=alpha or 0;p.Rotation=rotation or 0;p.ZIndex=3;p.Parent=parent
-		local c=Instance.new("UICorner");c.CornerRadius=UDim.new(1,0);c.Parent=p
-		return p
+	gradient.Color=ColorSequence.new({
+		ColorSequenceKeypoint.new(0,color:Lerp(white,.3)),
+		ColorSequenceKeypoint.new(.42,color:Lerp(white,.06)),
+		ColorSequenceKeypoint.new(1,color:Lerp(ink,.08)),
+	});gradient.Parent=face
+	-- Bright inner rim, the same curve one inset in.
+	local inner=Instance.new("Frame");inner.Name="InnerRim";inner.BackgroundTransparency=1;inner.Active=false
+	inner.Position=UDim2.fromOffset(NAV.InnerInset,NAV.InnerInset);inner.Size=UDim2.new(1,-NAV.InnerInset*2,1,-NAV.InnerInset*2);inner.ZIndex=3;inner.Parent=face
+	local innerCorner=Instance.new("UICorner");innerCorner.CornerRadius=UDim.new(0,NAV.Radius-NAV.InnerInset);innerCorner.Parent=inner
+	local innerLine=Instance.new("UIStroke");innerLine.Color=color:Lerp(white,.62);innerLine.Thickness=2.2;innerLine.Transparency=.08;innerLine.Parent=inner
+	-- "+" marks printed on the plastic: two large, one small.
+	local function plus(x,y,size,alpha)
+		local p=Instance.new("Frame");p.Name="Plus";p.BackgroundTransparency=1;p.Active=false
+		p.AnchorPoint=Vector2.new(.5,.5);p.Position=UDim2.fromScale(x,y);p.Size=UDim2.fromOffset(size,size);p.ZIndex=4;p.Parent=face
+		for _,horizontal in ipairs({true,false}) do
+			local bar=Instance.new("Frame");bar.Active=false;bar.BorderSizePixel=0;bar.AnchorPoint=Vector2.new(.5,.5)
+			bar.Position=UDim2.fromScale(.5,.5);bar.Size=if horizontal then UDim2.new(1,0,.34,0) else UDim2.new(.34,0,1,0)
+			bar.BackgroundColor3=color:Lerp(white,.78);bar.BackgroundTransparency=alpha;bar.ZIndex=4;bar.Parent=p
+			local c=Instance.new("UICorner");c.CornerRadius=UDim.new(.5,0);c.Parent=bar
+		end
 	end
-	do
-		-- Both highlights fade out at their ends. A solid bar with square ends
-		-- is what made the glint look blocky.
-		local streak=shape(face,"GlossStroke",.15,.17,34,6,Color3.fromRGB(255,255,238),-32,.3)
-		local taper=Instance.new("UIGradient")
-		taper.Transparency=NumberSequence.new({
-			NumberSequenceKeypoint.new(0,1),
-			NumberSequenceKeypoint.new(.5,0),
-			NumberSequenceKeypoint.new(1,1),
-		})
-		taper.Parent=streak
-
-		local dot=shape(face,"GlossDot",.075,.32,7,7,Color3.new(1,1,1),0,.4)
-		local soften=Instance.new("UIGradient")
-		soften.Rotation=90
-		soften.Transparency=NumberSequence.new({
-			NumberSequenceKeypoint.new(0,.15),
-			NumberSequenceKeypoint.new(1,1),
-		})
-		soften.Parent=dot
-	end
-	-- The small "+" sparkles are gone: the studs are the surface detail now.
-	local content=Instance.new("Frame");content.Name="NavContent";content.BackgroundTransparency=1
+	-- In the gaps of the stud grid, one each side, level with the second row.
+	plus(.17,.5,15,.08);plus(.83,.5,15,.08)
+	-- The big glossy reflection, upper-left, over the studs.
+	local gloss=Instance.new("Frame");gloss.Name="Gloss";gloss.Active=false;gloss.BorderSizePixel=0
+	gloss.BackgroundColor3=white;gloss.BackgroundTransparency=.62
+	gloss.Position=UDim2.fromOffset(NAV.InnerInset+2,NAV.InnerInset+1);gloss.Size=UDim2.new(.44,0,.4,0);gloss.ZIndex=5;gloss.Parent=face
+	local glossCorner=Instance.new("UICorner");glossCorner.CornerRadius=UDim.new(0,NAV.Radius-NAV.InnerInset-2);glossCorner.Parent=gloss
+	local glossFade=Instance.new("UIGradient");glossFade.Rotation=35
+	glossFade.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(.5,.55),NumberSequenceKeypoint.new(1,1)});glossFade.Parent=gloss
+	local streak=Instance.new("Frame");streak.Name="GlossStreak";streak.Active=false;streak.BorderSizePixel=0
+	streak.AnchorPoint=Vector2.new(.5,.5);streak.Position=UDim2.fromScale(.14,.22);streak.Size=UDim2.fromOffset(38,7);streak.Rotation=-32
+	streak.BackgroundColor3=white;streak.BackgroundTransparency=.2;streak.ZIndex=6;streak.Parent=face
+	local streakCorner=Instance.new("UICorner");streakCorner.CornerRadius=UDim.new(.5,0);streakCorner.Parent=streak
+	local taper=Instance.new("UIGradient");taper.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(.5,0),NumberSequenceKeypoint.new(1,1)});taper.Parent=streak
+	-- Content: icon upper middle, name lower middle.
+	local content=Instance.new("Frame");content.Name="NavContent";content.BackgroundTransparency=1;content.Active=false
 	content.Position=UDim2.fromOffset(4,0);content.Size=UDim2.new(1,-8,1,0);content.ZIndex=3;content.Parent=btn
-	local label=Instance.new("TextLabel");label.Name="Label";label.BackgroundTransparency=1
-	label.AnchorPoint=Vector2.new(.5,1);label.Position=UDim2.new(.5,0,1,-4);label.Size=UDim2.new(1,0,0,27)
+	local label=Instance.new("TextLabel");label.Name="Label";label.BackgroundTransparency=1;label.Active=false
+	label.AnchorPoint=Vector2.new(.5,1);label.Position=UDim2.new(.5,0,1,-NAV.LabelBottom);label.Size=UDim2.new(1,0,0,NAV.LabelHeight)
 	label.Text=text;label.Font=Enum.Font.FredokaOne;label.TextColor3=Color3.fromRGB(255,254,247)
 	label.TextScaled=false;label.TextWrapped=false;label.ZIndex=4;label.Parent=content
-	local fontSize=text=="Leaderboards" and 22 or 27
+	local fontSize=NAV.LabelSize
 	local measure=game:GetService("TextService")
-	while fontSize>18 and measure:GetTextSize(label.Text,fontSize,Enum.Font.FredokaOne,Vector2.new(1000,100)).X>172 do fontSize-=1 end
+	while fontSize>18 and measure:GetTextSize(label.Text,fontSize,Enum.Font.FredokaOne,Vector2.new(1000,100)).X>NAV_SLOT.X-30 do fontSize-=1 end
 	label.TextSize=fontSize
-	local stroke=Instance.new("UIStroke");stroke.Color=ink;stroke.Thickness=2.2;stroke.Transparency=.05;stroke.Parent=label
-	local function placeIcon(icon)
-		icon.AnchorPoint=Vector2.new(.5,0)
-		icon.Position=UDim2.new(.5,0,0,1);icon.Size=UDim2.fromOffset(52,47);icon.ZIndex=4
-		icon.Parent=content
-	end
+	local stroke=Instance.new("UIStroke");stroke.Color=ink;stroke.Thickness=3.4;stroke.LineJoinMode=Enum.LineJoinMode.Round;stroke.Parent=label
 	if iconId and iconId~="" then
-		-- Exactly one artwork per button. Each PNG already carries its own
-		-- navy outline, gloss and colour, so it is drawn once, untinted and
-		-- never stretched. Fit can only letterbox, never crop, so the podium's
-		-- "1", the book edges, the rebirth sparkle and the chest corners all
-		-- stay whole. The scale below evens out their different aspect ratios
-		-- so no button's icon looks bigger than its neighbours'.
+		-- Exactly one artwork per button, untinted and never stretched (Fit).
+		-- The scale evens out the PNGs' different aspect ratios.
 		local visualScale={Store=1,Leaderboards=1,Index=.94,Rebirth=.94,Inventory=1}
-		local icon=Instance.new("Frame");icon.Name="Icon";icon.BackgroundTransparency=1;placeIcon(icon)
+		local icon=Instance.new("Frame");icon.Name="Icon";icon.BackgroundTransparency=1;icon.Active=false
+		icon.AnchorPoint=Vector2.new(.5,0);icon.Position=UDim2.new(.5,0,0,NAV.IconTop);icon.Size=UDim2.fromOffset(NAV.IconSize.X,NAV.IconSize.Y);icon.ZIndex=4
+		icon.Parent=content
 		local size=visualScale[text] or 1
 		local image=Instance.new("ImageLabel");image.Name="IconArtwork"
 		image.BackgroundTransparency=1;image.BorderSizePixel=0
@@ -731,15 +748,25 @@ local function buildCohesiveNav(text,color,iconId)
 		image.Image=iconId;image.ScaleType=Enum.ScaleType.Fit
 		image.ImageColor3=Color3.fromRGB(255,255,255)
 		image.ZIndex=3;image.Parent=icon
+		-- Store keeps a little celebration: one gold sparkle by the cart.
+		if text=="Store" then
+			local spark=Instance.new("Frame");spark.Name="StoreSparkle";spark.BackgroundTransparency=1;spark.Active=false
+			spark.AnchorPoint=Vector2.new(.5,.5);spark.Position=UDim2.fromScale(1.02,.12);spark.Size=UDim2.fromOffset(15,15);spark.ZIndex=5;spark.Parent=icon
+			for _,rotation in ipairs({0,90}) do
+				local ray=Instance.new("Frame");ray.Active=false;ray.BorderSizePixel=0;ray.AnchorPoint=Vector2.new(.5,.5)
+				ray.Position=UDim2.fromScale(.5,.5);ray.Size=UDim2.new(1,0,.26,0);ray.Rotation=rotation
+				ray.BackgroundColor3=Color3.fromRGB(255,246,190);ray.ZIndex=5;ray.Parent=spark
+				local c=Instance.new("UICorner");c.CornerRadius=UDim.new(.5,0);c.Parent=ray
+				local g=Instance.new("UIGradient");g.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(.5,0),NumberSequenceKeypoint.new(1,1)});g.Parent=ray
+			end
+		end
 	end
-	-- Molded studs: on the coloured face, above its gradient, under its rim
-	-- light and gloss, and under the icon and name (the content layer). One
-	-- even grid above the name, framing the icon - identical on all five.
+	-- Molded studs over the whole face, under the "+" marks, gloss and content.
 	do
 		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
 		local ok, StudSurface = pcall(function() return module and require(module) end)
 		if ok and type(StudSurface) == "table" and StudSurface.Apply then
-			StudSurface.Apply(face, { Color = color, Avoid = { content:FindFirstChild("Icon") }, Above = label })
+			StudSurface.Apply(face, { Color = color, Icon = content:FindFirstChild("Icon"), Label = label, Margin = NAV.InnerInset + 5 })
 		end
 	end
 	local scale=Instance.new("UIScale");scale.Parent=btn
@@ -748,7 +775,8 @@ local function buildCohesiveNav(text,color,iconId)
 	local function update()
 		for _,t in ipairs(tweens) do t:Cancel() end;table.clear(tweens)
 		local reduced=player:GetAttribute("ReduceMotion")==true
-		local offset=reduced and 0 or (down and 3 or (hover and -.75 or 0))
+		-- Pressed: the face sinks onto its lip; hover lifts it a hair.
+		local offset=reduced and 0 or (down and NAV.Lip-3 or (hover and -1 or 0))
 		local function animate(object,goal)
 			local t=TweenService:Create(object,TweenInfo.new(reduced and 0 or .14,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),goal)
 			tweens[#tweens+1]=t;t:Play()
@@ -1185,19 +1213,19 @@ local menu = Instance.new("Frame")
 menu.Name = "SideMenu"
 menu.AnchorPoint = Vector2.new(0, 0.5)
 menu.Position = UDim2.new(0, 20, 0.5, 0)
-menu.Size = UDim2.fromOffset(184, 10)
+menu.Size = UDim2.fromOffset(NAV_SLOT.X, 10)
 menu.AutomaticSize = Enum.AutomaticSize.Y
 menu.BackgroundTransparency = 1
 menu.Parent = gui
 
 local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 12)
+layout.Padding = UDim.new(0, NAV_GAP)
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = menu
 
 local function addMenuButton(text, color, iconId, glimmer, order)
-	local slot = makeSlot(menu, text, UDim2.fromOffset(184, 76), order)
+	local slot = makeSlot(menu, text, UDim2.fromOffset(NAV_SLOT.X, NAV_SLOT.Y), order)
 	local button = buildButton(text, color, iconId, glimmer)
 	button.Parent = slot
 	local oldShadow=slot:FindFirstChild("Shadow");if oldShadow then oldShadow.Visible=false end
@@ -3303,6 +3331,13 @@ end
 local function setIconOnly(iconOnly)
 	for _, item in ipairs(menuButtons) do
 		if item.label then item.label.Visible = not iconOnly end
+		-- Small square phone buttons: the studs alone, no "+" marks.
+		local face = item.slot:FindFirstChild("Face", true)
+		if face then
+			for _, mark in ipairs(face:GetChildren()) do
+				if mark.Name == "Plus" then mark.Visible = not iconOnly end
+			end
+		end
 		if item.icon then
 			item.icon.AnchorPoint = if iconOnly then Vector2.new(0.5, 0.5) else item.iconAnchor
 			item.icon.Position = if iconOnly then UDim2.fromScale(0.5, 0.5) else item.iconPosition
@@ -3320,6 +3355,36 @@ local function setMultipliers(values)
 end
 
 local hudLayoutKey = nil
+
+-- Desktop / tablet: the bigger nav buttons plus the currency cluster under
+-- them must fit between Roblox's top bar and the bottom edge. Normally the
+-- menu stays centred at full size; on short windows it first slides up, then
+-- shrinks just enough (never below 72%).
+local function fitNavStack()
+	if not UiResponsive or UiResponsive.Layout() == "compact" then return end
+	if top.AbsoluteSize.Y < 2 or gemsPill.AbsoluteSize.Y < 2 then return end
+	local vp = camera.ViewportSize
+	if vp.Y < 2 then return end
+	local s = math.clamp(math.min(vp.X / DESIGN.X, vp.Y / DESIGN.Y), MIN_SCALE, MAX_SCALE)
+		* math.clamp(math.min(vp.X / 1920, vp.Y / 1080), 1, 1.6)
+	local safeOffset, safeSize = UiResponsive.SafeRectIn(gui)
+	local guiTop = UiResponsive.ToScreen(gui.AbsolutePosition).Y
+	local topClear = math.max(UiResponsive.TopInset() - guiTop, safeOffset.Y) + 12
+	local bottom = safeOffset.Y + safeSize.Y - 12
+	local cluster = top.AbsoluteSize.Y + gemsPill.AbsoluteSize.Y + 28 * s
+	local navDesign = 5 * NAV_SLOT.Y + 4 * NAV_GAP
+	local room = bottom - topClear
+	local m = math.clamp((room - cluster) / (navDesign * s), 0.72, 1)
+	if math.abs((scaleMultipliers[menu] or 1) - m) > 0.005 then
+		setMultipliers({ [menu] = m })
+	end
+	local navPx = navDesign * s * m
+	local centre = gui.AbsoluteSize.Y * 0.5
+	local lowest = bottom - cluster - navPx / 2
+	local highest = topClear + navPx / 2
+	centre = math.max(math.min(centre, lowest), highest)
+	menu.Position = UDim2.new(0, safeOffset.X + 20, 0, math.floor(centre + 0.5))
+end
 
 local function applyHudLayout()
 	if not UiResponsive then return end
@@ -3368,14 +3433,18 @@ local function applyHudLayout()
 		playSlot.AnchorPoint = Vector2.new(1, 0.5)
 		actionBar.Position = UDim2.new(0.5, 0, 0, 14)
 		menu.AnchorPoint = Vector2.new(0, 0.5)
-		menu.Size = UDim2.fromOffset(184, 10)
+		menu.Size = UDim2.fromOffset(NAV_SLOT.X, 10)
 		menu.Position = UDim2.new(0, safeOffset.X + 20, 0.5, 0)
 		-- Further in from the edge and a little above centre: it was sitting
 		-- tight against the screen edge with nothing around it.
 		playSlot.Position = UDim2.new(1, -(rightInset + 14), 0.46, 0)
 		setMultipliers({ [actionBar] = 1, [top] = CURRENCY_HUD_SCALE, [gemsPill] = CURRENCY_HUD_SCALE * GEMS_HUD_SCALE, [menu] = 1, [playSlot] = 1 })
+		task.defer(fitNavStack)
 	end
 end
+camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() task.defer(fitNavStack) end)
+top:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(fitNavStack) end)
+gemsPill:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(fitNavStack) end)
 
 applyHudLayout()
 if UiResponsive then
