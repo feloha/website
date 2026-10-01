@@ -313,7 +313,7 @@ end
 
 -- ===== main ScreenGui =====
 -- If Output doesn't show this line, an older copy of MainHUD is running.
-print("[MainHUD] build 2026-10-01e  (molded studded nav buttons, Gems left-aligned under Stardust)")
+print("[MainHUD] build 2026-10-01f  (molded studded nav + Playtime Awards)")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
@@ -662,28 +662,35 @@ local NAV = {
 	LabelSize = 30,        -- shrinks only for long names (Leaderboards)
 	LabelBottom = 5,
 }
-local function buildCohesiveNav(text,color,iconId)
+-- spec (optional) overrides NAV for a differently sized tile (Playtime
+-- Awards): Width, DisplayText, Plus = { {x, y, size}, ... }, Stud = {...}.
+local function buildCohesiveNav(text,color,iconId,spec)
+	local N=table.clone(NAV)
+	for key,value in pairs(spec or {}) do N[key]=value end
 	-- Brighter, cleaner plastic than before (reference colours).
-	local palette={Store=Color3.fromRGB(255,203,28),Leaderboards=Color3.fromRGB(22,220,226),Index=Color3.fromRGB(38,130,255),Rebirth=Color3.fromRGB(184,70,250),Inventory=Color3.fromRGB(255,146,36)}
+	local palette={Store=Color3.fromRGB(255,203,28),Leaderboards=Color3.fromRGB(22,220,226),Index=Color3.fromRGB(38,130,255),Rebirth=Color3.fromRGB(184,70,250),Inventory=Color3.fromRGB(255,146,36),["Playtime Awards"]=Color3.fromRGB(255,152,30)}
 	color=palette[text] or color
 	local ink=Color3.fromRGB(18,24,62)
 	local white=Color3.new(1,1,1)
 	local btn=Instance.new("TextButton")
 	btn.Name=text;btn.Text="";btn.BackgroundTransparency=1;btn.AutoButtonColor=false
 	btn.AnchorPoint=Vector2.new(.5,.5);btn.Position=UDim2.fromScale(.5,.5);btn.Size=UDim2.fromScale(1,1);btn.ZIndex=2
+	-- This tile animates its own press; the shared press bounce must not
+	-- tween the same UIScale at the same time.
+	btn:SetAttribute("OwnPressAnimation",true)
 	local function plate(name,y,tint,z,parent)
 		local frame=Instance.new("Frame");frame.Name=name;frame.Position=UDim2.fromOffset(0,y);frame.Size=UDim2.fromScale(1,1)
 		frame.BackgroundColor3=tint;frame.BorderSizePixel=0;frame.ZIndex=z;frame.Active=false;frame.Parent=parent or btn
-		local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,NAV.Radius);c.Parent=frame
+		local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,N.Radius);c.Parent=frame
 		return frame
 	end
 	-- Depth: soft shadow, then the dark lip the face sits on.
-	local shadow=plate("DropShadow",NAV.Lip+5,ink,0);shadow.BackgroundTransparency=.62
-	local lip=plate("Lip",NAV.Lip,color:Lerp(ink,.62),1)
-	local lipLine=Instance.new("UIStroke");lipLine.Thickness=NAV.Rim;lipLine.Color=ink;lipLine.Parent=lip
+	local shadow=plate("DropShadow",N.Lip+5,ink,0);shadow.BackgroundTransparency=.62
+	local lip=plate("Lip",N.Lip,color:Lerp(ink,.62),1)
+	local lipLine=Instance.new("UIStroke");lipLine.Thickness=N.Rim;lipLine.Color=ink;lipLine.Parent=lip
 	-- The face: thick navy rim, bright top fading to the rich colour.
 	local face=plate("Face",0,Color3.new(1,1,1),2)
-	local rim=Instance.new("UIStroke");rim.Thickness=NAV.Rim;rim.Color=ink;rim.Parent=face
+	local rim=Instance.new("UIStroke");rim.Thickness=N.Rim;rim.Color=ink;rim.Parent=face
 	local gradient=Instance.new("UIGradient");gradient.Rotation=90
 	gradient.Color=ColorSequence.new({
 		ColorSequenceKeypoint.new(0,color:Lerp(white,.3)),
@@ -692,8 +699,8 @@ local function buildCohesiveNav(text,color,iconId)
 	});gradient.Parent=face
 	-- Bright inner rim, the same curve one inset in.
 	local inner=Instance.new("Frame");inner.Name="InnerRim";inner.BackgroundTransparency=1;inner.Active=false
-	inner.Position=UDim2.fromOffset(NAV.InnerInset,NAV.InnerInset);inner.Size=UDim2.new(1,-NAV.InnerInset*2,1,-NAV.InnerInset*2);inner.ZIndex=3;inner.Parent=face
-	local innerCorner=Instance.new("UICorner");innerCorner.CornerRadius=UDim.new(0,NAV.Radius-NAV.InnerInset);innerCorner.Parent=inner
+	inner.Position=UDim2.fromOffset(N.InnerInset,N.InnerInset);inner.Size=UDim2.new(1,-N.InnerInset*2,1,-N.InnerInset*2);inner.ZIndex=3;inner.Parent=face
+	local innerCorner=Instance.new("UICorner");innerCorner.CornerRadius=UDim.new(0,N.Radius-N.InnerInset);innerCorner.Parent=inner
 	local innerLine=Instance.new("UIStroke");innerLine.Color=color:Lerp(white,.62);innerLine.Thickness=2.2;innerLine.Transparency=.08;innerLine.Parent=inner
 	-- "+" marks printed on the plastic: two large, one small.
 	local function plus(x,y,size,alpha)
@@ -707,12 +714,12 @@ local function buildCohesiveNav(text,color,iconId)
 		end
 	end
 	-- In the gaps of the stud grid, one each side, level with the second row.
-	plus(.17,.5,15,.08);plus(.83,.5,15,.08)
+	for _,mark in ipairs(N.Plus or {{.17,.5,15},{.83,.5,15}}) do plus(mark[1],mark[2],mark[3],.08) end
 	-- The big glossy reflection, upper-left, over the studs.
 	local gloss=Instance.new("Frame");gloss.Name="Gloss";gloss.Active=false;gloss.BorderSizePixel=0
 	gloss.BackgroundColor3=white;gloss.BackgroundTransparency=.62
-	gloss.Position=UDim2.fromOffset(NAV.InnerInset+2,NAV.InnerInset+1);gloss.Size=UDim2.new(.44,0,.4,0);gloss.ZIndex=5;gloss.Parent=face
-	local glossCorner=Instance.new("UICorner");glossCorner.CornerRadius=UDim.new(0,NAV.Radius-NAV.InnerInset-2);glossCorner.Parent=gloss
+	gloss.Position=UDim2.fromOffset(N.InnerInset+2,N.InnerInset+1);gloss.Size=UDim2.new(.44,0,.4,0);gloss.ZIndex=5;gloss.Parent=face
+	local glossCorner=Instance.new("UICorner");glossCorner.CornerRadius=UDim.new(0,N.Radius-N.InnerInset-2);glossCorner.Parent=gloss
 	local glossFade=Instance.new("UIGradient");glossFade.Rotation=35
 	glossFade.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(.5,.55),NumberSequenceKeypoint.new(1,1)});glossFade.Parent=gloss
 	local streak=Instance.new("Frame");streak.Name="GlossStreak";streak.Active=false;streak.BorderSizePixel=0
@@ -724,12 +731,12 @@ local function buildCohesiveNav(text,color,iconId)
 	local content=Instance.new("Frame");content.Name="NavContent";content.BackgroundTransparency=1;content.Active=false
 	content.Position=UDim2.fromOffset(4,0);content.Size=UDim2.new(1,-8,1,0);content.ZIndex=3;content.Parent=btn
 	local label=Instance.new("TextLabel");label.Name="Label";label.BackgroundTransparency=1;label.Active=false
-	label.AnchorPoint=Vector2.new(.5,1);label.Position=UDim2.new(.5,0,1,-NAV.LabelBottom);label.Size=UDim2.new(1,0,0,NAV.LabelHeight)
-	label.Text=text;label.Font=Enum.Font.FredokaOne;label.TextColor3=Color3.fromRGB(255,254,247)
+	label.AnchorPoint=Vector2.new(.5,1);label.Position=UDim2.new(.5,0,1,-N.LabelBottom);label.Size=UDim2.new(1,0,0,N.LabelHeight)
+	label.Text=N.DisplayText or text;label.Font=Enum.Font.FredokaOne;label.TextColor3=Color3.fromRGB(255,254,247)
 	label.TextScaled=false;label.TextWrapped=false;label.ZIndex=4;label.Parent=content
-	local fontSize=NAV.LabelSize
+	local fontSize=N.LabelSize
 	local measure=game:GetService("TextService")
-	while fontSize>18 and measure:GetTextSize(label.Text,fontSize,Enum.Font.FredokaOne,Vector2.new(1000,100)).X>NAV_SLOT.X-30 do fontSize-=1 end
+	while fontSize>18 and measure:GetTextSize(label.Text,fontSize,Enum.Font.FredokaOne,Vector2.new(1000,1000)).X>(N.Width or NAV_SLOT.X)-30 do fontSize-=1 end
 	label.TextSize=fontSize
 	local stroke=Instance.new("UIStroke");stroke.Color=ink;stroke.Thickness=3.4;stroke.LineJoinMode=Enum.LineJoinMode.Round;stroke.Parent=label
 	if iconId and iconId~="" then
@@ -737,7 +744,7 @@ local function buildCohesiveNav(text,color,iconId)
 		-- The scale evens out the PNGs' different aspect ratios.
 		local visualScale={Store=1,Leaderboards=1,Index=.94,Rebirth=.94,Inventory=1}
 		local icon=Instance.new("Frame");icon.Name="Icon";icon.BackgroundTransparency=1;icon.Active=false
-		icon.AnchorPoint=Vector2.new(.5,0);icon.Position=UDim2.new(.5,0,0,NAV.IconTop);icon.Size=UDim2.fromOffset(NAV.IconSize.X,NAV.IconSize.Y);icon.ZIndex=4
+		icon.AnchorPoint=Vector2.new(.5,0);icon.Position=UDim2.new(.5,0,0,N.IconTop);icon.Size=UDim2.fromOffset(N.IconSize.X,N.IconSize.Y);icon.ZIndex=4
 		icon.Parent=content
 		local size=visualScale[text] or 1
 		local image=Instance.new("ImageLabel");image.Name="IconArtwork"
@@ -766,7 +773,9 @@ local function buildCohesiveNav(text,color,iconId)
 		local module = game:GetService("ReplicatedStorage"):FindFirstChild("StudSurface")
 		local ok, StudSurface = pcall(function() return module and require(module) end)
 		if ok and type(StudSurface) == "table" and StudSurface.Apply then
-			StudSurface.Apply(face, { Color = color, Icon = content:FindFirstChild("Icon"), Label = label, Margin = NAV.InnerInset + 5 })
+			local studOptions = { Color = color, Label = label, Margin = N.InnerInset + 5 }
+			for key, value in pairs(N.Stud or {}) do studOptions[key] = value end
+			StudSurface.Apply(face, studOptions)
 		end
 	end
 	local scale=Instance.new("UIScale");scale.Parent=btn
@@ -776,7 +785,7 @@ local function buildCohesiveNav(text,color,iconId)
 		for _,t in ipairs(tweens) do t:Cancel() end;table.clear(tweens)
 		local reduced=player:GetAttribute("ReduceMotion")==true
 		-- Pressed: the face sinks onto its lip; hover lifts it a hair.
-		local offset=reduced and 0 or (down and NAV.Lip-3 or (hover and -1 or 0))
+		local offset=reduced and 0 or (down and N.Lip-3 or (hover and -1 or 0))
 		local function animate(object,goal)
 			local t=TweenService:Create(object,TweenInfo.new(reduced and 0 or .14,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),goal)
 			tweens[#tweens+1]=t;t:Play()
@@ -1263,98 +1272,24 @@ playSlot.Parent = gui
 
 local playShadow = addShadow(playSlot)
 
-local playBtn = buildButton("Playtime Awards", THEME.Playtime, "rbxassetid://126373776467964", false)
+-- Playtime Awards: the same molded, studded plastic as the side menu (the
+-- old one-piece PNG had the gift and lettering baked in, so studs could not
+-- go behind them). Gift icon and name sit on the studs.
+local PLAYTIME_TILE = Vector2.new(274, 206)   -- the size knob for this button
+playSlot.Size = UDim2.fromOffset(PLAYTIME_TILE.X, PLAYTIME_TILE.Y)
+local playBtn = buildCohesiveNav("Playtime Awards", THEME.Playtime, "rbxassetid://126373776467964", {
+	Width = PLAYTIME_TILE.X,
+	Radius = 40, Lip = 9, Rim = 5, InnerInset = 6,
+	IconSize = Vector2.new(150, 112), IconTop = 10,
+	LabelHeight = 76, LabelSize = 36, LabelBottom = 10,
+	DisplayText = "Playtime\nAwards",
+	-- In the grid gaps either side of the gift.
+	Plus = { { 0.2, 0.255, 20 }, { 0.8, 0.255, 20 } },
+	Stud = { Margin = 14, MaxDiameter = 26, MaxColumns = 5, MaxRows = 4 },
+})
 playBtn.Parent = playSlot
-
--- One graphic for the whole button, when UIAssets carries one. The drawn
--- button stays underneath and comes back if the image never arrives, so a
--- missing or slow id can never leave an empty square here.
-do
-	-- The id is carried here as well as in UIAssets, so an older copy of the
-	-- module cannot stop the swap happening.
-	local artId = UIAssets.PlaytimeButton
-	if type(artId) ~= "string" or artId == "" then
-		artId = "rbxassetid://124105198585397"
-	end
-
-	print(("[MainHUD] build 2026-09-25  playtime art: %s"):format(artId))
-
-	if artId ~= "" then
-		-- 1.33, measured off the rendered button (200 x 150 on screen), not
-		-- 1.22. With Fit and a slot that is too wide, the artwork was
-		-- width-bound and sat in a 9px vertical letterbox - which is why the
-		-- badge, positioned against the SLOT, kept landing above the visible
-		-- button instead of on it. Matching the ratio removes the letterbox,
-		-- so the slot and the button are now the same rectangle.
-		local ART_RATIO = 1.33          -- width / height of the button artwork
-		-- ===== THE SIZE KNOB =====
-		-- This one number is the whole size of the Playtime Awards button.
-		-- The original was 108. The icon and the lettering are part of the
-		-- same graphic, so they scale with it and nothing needs re-centring.
-		-- Change it and nothing else; the print below confirms what took.
-		local ART_HEIGHT = 206
-		playSlot.Size = UDim2.fromOffset(math.floor(ART_HEIGHT * ART_RATIO), ART_HEIGHT)
-		-- Printed so the size can be confirmed from the output rather than by
-		-- eye. If this line says anything other than 214x176, the copy of
-		-- MainHUD that is running is not this one.
-		print(("[MainHUD] playtime slot %dx%d"):format(
-			playSlot.Size.X.Offset, playSlot.Size.Y.Offset))
-
-		local art = Instance.new("ImageLabel")
-		art.Name = "PlaytimeArtwork"
-		art.BackgroundTransparency = 1
-		art.BorderSizePixel = 0
-		art.Active = false
-		art.Size = UDim2.fromScale(1, 1)
-		art.Image = artId
-		art.ScaleType = Enum.ScaleType.Fit
-		art.ImageColor3 = Color3.new(1, 1, 1)
-		-- Drawn from the first frame, on top of the drawn button. Roblox only
-		-- fetches an image for a label it is actually rendering, so a hidden or
-		-- fully transparent label may never load at all - which is exactly why
-		-- the earlier attempts never swapped. Until the picture arrives this
-		-- label draws nothing, so the drawn button underneath is what shows.
-		art.ZIndex = 8
-		art.Parent = playBtn
-
-		local function useArtwork(on)
-			art.ImageTransparency = 0
-			for _, child in ipairs(playBtn:GetChildren()) do
-				if child ~= art and (child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("ImageLabel")) then
-					child.Visible = not on
-				end
-			end
-			art.Visible = true
-			playBtn.BackgroundTransparency = if on then 1 else 0
-			local edge = playBtn:FindFirstChildOfClass("UIStroke")
-			if edge then edge.Transparency = if on then 1 else 0 end
-			-- The drawn button's own drop shadow would otherwise sit behind the
-			-- artwork as a dark rectangle, since the artwork carries its own.
-			if playShadow then playShadow.Visible = not on end
-		end
-
-		task.spawn(function()
-			local deadline = os.clock() + 12
-			while os.clock() < deadline and not art.IsLoaded do
-				task.wait(0.2)
-			end
-			if not art.IsLoaded then
-				-- Keep watching for ten minutes: a fresh upload can be held in
-				-- moderation long after the game has started.
-				local giveUp = os.clock() + 600
-				while os.clock() < giveUp and not art.IsLoaded do
-					task.wait(3)
-				end
-			end
-			print(("[MainHUD] playtime button art %s -> %s"):format(
-				artId, if art.IsLoaded then "LOADED, drawn button hidden"
-					else "not confirmed loaded; artwork is on screen with the drawn button behind it"))
-			if art.IsLoaded then
-				useArtwork(true)
-			end
-		end)
-	end
-end
+-- The tile draws its own shadow and lip.
+playShadow.Visible = false
 
 local shadowDown = playShadow.Position
 local shadowUp = shadowDown - UDim2.fromOffset(0, 8)

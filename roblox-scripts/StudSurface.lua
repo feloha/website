@@ -36,7 +36,7 @@
 local TextService = game:GetService("TextService")
 
 local StudSurface = {}
-print("[StudSurface] build 2026-10-01e (molded studs, full face)")
+print("[StudSurface] build 2026-10-01f (no gaps, no hover rebuild)")
 
 StudSurface.AssetId = "rbxassetid://140302758156355"   -- the supplied texture (see above)
 StudSurface.StudImage = nil
@@ -86,7 +86,7 @@ local function round(parent, name, size, position, color, z, transparency)
 	return f
 end
 
-local function buildStud(layer, x, y, d, color)
+local function buildStud(layer, x, y, d, color, faded)
 	local stud = Instance.new("Frame")
 	stud.Name = "Stud"
 	stud.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -101,7 +101,10 @@ local function buildStud(layer, x, y, d, color)
 	square.Parent = stud
 
 	-- Contact shadow: a darker version of the same plastic, down-right.
-	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.07, 0.5, d * 0.11), color:Lerp(INK, 0.5), 1, 0.45)
+	-- Behind the lettering a stud stays in the grid (no gaps) but is pressed
+	-- back, so the name reads cleanly on top of it.
+	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.07, 0.5, d * 0.11), color:Lerp(INK, 0.5), 1,
+		if faded then 0.82 else 0.45)
 
 	if StudSurface.StudImage then
 		local picture = Instance.new("ImageLabel")
@@ -121,7 +124,7 @@ local function buildStud(layer, x, y, d, color)
 
 	-- Body: molded from the button's own plastic - lit edge upper-left,
 	-- the face colour through the middle, a soft shade lower-right.
-	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2)
+	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2, if faded then 0.55 else 0)
 	local shade = Instance.new("UIGradient")
 	shade.Rotation = 45
 	shade.Color = ColorSequence.new({
@@ -133,11 +136,11 @@ local function buildStud(layer, x, y, d, color)
 	local rim = Instance.new("UIStroke")
 	rim.Color = color:Lerp(INK, 0.35)
 	rim.Thickness = math.max(1, d * 0.05)
-	rim.Transparency = 0.55
+	rim.Transparency = if faded then 0.85 else 0.55
 	rim.Parent = body
 
 	-- Glint: a soft white crescent on the upper-left shoulder.
-	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3, 0.3)
+	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3, if faded then 0.75 else 0.3)
 	glint.Rotation = -38
 	local fade = Instance.new("UIGradient")
 	fade.Rotation = 90
@@ -169,15 +172,6 @@ local function textRect(label, face, k)
 	return { left, top, left + w, top + h }
 end
 
--- The middle `share` of an object's box (icon art is drawn Fit and its
--- edges are mostly empty, so studs may peek out around it).
-local function coreRect(object, face, k, share)
-	local at, size = localRect(object, face, k)
-	if not at then return nil end
-	local inset = size * (1 - share) / 2
-	return { at.X + inset.X, at.Y + inset.Y, at.X + size.X - inset.X, at.Y + size.Y - inset.Y }
-end
-
 function StudSurface.Apply(face, options)
 	if not (face and face:IsA("GuiObject")) then return nil end
 	local opts = {}
@@ -206,12 +200,17 @@ function StudSurface.Apply(face, options)
 	end
 
 	local lastKey = nil
-	local function layout()
+	local lastW, lastH = -1, -1
+	local function layout(force)
 		if not layer.Parent then return end
 		local k = scaleOf(face)
 		local size = face.AbsoluteSize / k
 		if size.X < 8 or size.Y < 8 then return end
-		local W, H = size.X, size.Y
+		-- Hover / press only rescale the button: its design size is unchanged,
+		-- so nothing is rebuilt (that rebuild is what made studs blink).
+		local W, H = math.floor(size.X + 0.5), math.floor(size.Y + 0.5)
+		if not force and math.abs(W - lastW) <= 3 and math.abs(H - lastH) <= 3 then return end
+		lastW, lastH = W, H
 		local d = math.clamp(math.min(W, H) * opts.SizeShare, opts.MinDiameter, opts.MaxDiameter)
 		d = math.max(d, opts.MinScreenPx / k)
 		local r = d / 2
@@ -223,42 +222,38 @@ function StudSurface.Apply(face, options)
 		local spanX = W - 2 * margin - d
 		local spanY = H - 2 * margin - d
 		local columns = math.clamp(math.floor(spanX / (d * opts.PitchShare)) + 1, 2, opts.MaxColumns)
-		local rows = math.max(1, math.floor(spanY / (d * 1.4)) + 1)
+		local rows = math.clamp(math.floor(spanY / (d * 1.4)) + 1, 1, opts.MaxRows or 99)
 		local pitchX = spanX / math.max(columns - 1, 1)
 		local pitchY = if rows > 1 then spanY / (rows - 1) else 0
 		local x0, y0 = margin + r, margin + r
 		if rows == 1 then y0 = H / 2 end
 
-		-- The content sits ON the studs; only studs that would land right
-		-- behind the lettering, or behind the icon's centre, are left out.
-		local keepOut = {}
+		-- Every grid position gets a stud, so there are never gaps. The icon
+		-- simply sits on top; studs right behind the lettering are pressed
+		-- back (faded) so the name stays clean.
 		local labelRect = textRect(opts.Label, face, k)
-		if labelRect then table.insert(keepOut, labelRect) end
-		local iconRect = coreRect(opts.Icon, face, k, 0.5)
-		if iconRect then table.insert(keepOut, iconRect) end
-
 		local spots = {}
 		for row = 0, rows - 1 do
 			for column = 0, columns - 1 do
 				local x, y = x0 + column * pitchX, y0 + row * pitchY
-				local free = true
-				for _, rect in ipairs(keepOut) do
-					if x > rect[1] and x < rect[3] and y > rect[2] and y < rect[4] then free = false break end
-				end
-				if free then table.insert(spots, { x, y }) end
+				local faded = labelRect ~= nil and x > labelRect[1] and x < labelRect[3]
+					and y > labelRect[2] and y < labelRect[4]
+				table.insert(spots, { x, y, faded })
 			end
 		end
-		-- Small square faces (icon-only on phones): four corner studs.
-		local dd = d
-		if #spots < 4 then
-			dd = math.max(opts.MinDiameter * 0.85, d * 0.78)
-			local c = margin + dd / 2
-			spots = { { c, c }, { W - c, c }, { c, H - c }, { W - c, H - c } }
+		-- Mirror the fading left-right, so a name that is a hair off-centre
+		-- never fades one side's stud and not the other's.
+		for _, spot in ipairs(spots) do
+			for _, other in ipairs(spots) do
+				if math.abs(other[2] - spot[2]) < 0.5 and math.abs((W - other[1]) - spot[1]) < 0.5 and other[3] then
+					spot[3] = true
+				end
+			end
 		end
 
-		local parts = { math.floor(W + 0.5), math.floor(H + 0.5), math.floor(dd * 10) }
+		local parts = { math.floor(d * 10) }
 		for _, spot in ipairs(spots) do
-			table.insert(parts, math.floor(spot[1]) .. "," .. math.floor(spot[2]))
+			table.insert(parts, math.floor(spot[1]) .. "," .. math.floor(spot[2]) .. (if spot[3] then "f" else ""))
 		end
 		local key = table.concat(parts, "|")
 		if key == lastKey then return end
@@ -268,29 +263,32 @@ function StudSurface.Apply(face, options)
 			if child.Name == "Stud" then child:Destroy() end
 		end
 		for _, spot in ipairs(spots) do
-			buildStud(layer, spot[1], spot[2], dd, color)
+			buildStud(layer, spot[1], spot[2], d, color, spot[3])
 		end
 	end
 
-	local queued = false
-	local function schedule()
+	local queued, forced = false, false
+	local function schedule(force)
+		forced = forced or force == true
 		if queued then return end
 		queued = true
 		task.defer(function()
 			queued = false
-			layout()
+			local f = forced
+			forced = false
+			layout(f)
 		end)
 	end
-	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
-	local watched = { opts.Icon, opts.Label }
-	for _, object in pairs(watched) do
-		if object and object:IsA("GuiObject") then
-			object:GetPropertyChangedSignal("AbsoluteSize"):Connect(schedule)
-			object:GetPropertyChangedSignal("Visible"):Connect(schedule)
-			if object:IsA("TextLabel") then object:GetPropertyChangedSignal("TextSize"):Connect(schedule) end
+	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() schedule(false) end)
+	-- Content changes that really move things (phone icon-only mode, a new
+	-- name): never their size flickering during a hover tween.
+	local label = opts.Label
+	if label and label:IsA("TextLabel") then
+		for _, property in ipairs({ "Visible", "Text", "TextSize" }) do
+			label:GetPropertyChangedSignal(property):Connect(function() schedule(true) end)
 		end
 	end
-	schedule()
+	schedule(true)
 	return layer
 end
 
