@@ -209,6 +209,29 @@ function UiResponsive.MeasureText(text, textSize, font, width)
 	return TextService:GetTextSize(text or "", textSize, font, Vector2.new(width or 100000, 100000))
 end
 
+-- ===================== SCROLLING =====================
+-- Makes a list easy to scroll with a thumb: one direction only (a swipe never
+-- wobbles sideways), elastic ends, and a bar thick enough to see on touch.
+function UiResponsive.TouchScroll(frame, direction)
+	if not (frame and frame:IsA("ScrollingFrame")) then return end
+	frame.ScrollingDirection = direction or Enum.ScrollingDirection.Y
+	frame.ElasticBehavior = Enum.ElasticBehavior.Always
+	frame.ScrollingEnabled = true
+	local function refresh()
+		if UiResponsive.InputMode() == "Touch" then
+			frame.ScrollBarThickness = math.max(frame.ScrollBarThickness, 8)
+			frame.ScrollBarImageTransparency = math.min(frame.ScrollBarImageTransparency, 0.35)
+		end
+	end
+	refresh()
+	frame:GetPropertyChangedSignal("ScrollBarThickness"):Connect(function()
+		if UiResponsive.InputMode() == "Touch" and frame.ScrollBarThickness < 8 then
+			frame.ScrollBarThickness = 8
+		end
+	end)
+	UiResponsive.Changed:Connect(refresh)
+end
+
 -- ===================== INPUT =====================
 local inputMode
 

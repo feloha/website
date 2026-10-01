@@ -445,6 +445,10 @@ scroll.CanvasSize = UDim2.new()
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.ZIndex = 53
 scroll.Parent = panel
+do   -- easy thumb scrolling
+	local ok, responsive = pcall(function() return require(game:GetService("ReplicatedStorage"):WaitForChild("UiResponsive", 5)) end)
+	if ok and type(responsive) == "table" and responsive.TouchScroll then responsive.TouchScroll(scroll) end
+end
 
 local grid = Instance.new("UIGridLayout")
 grid.CellSize = UDim2.fromOffset(215, 270)

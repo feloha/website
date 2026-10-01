@@ -374,6 +374,7 @@ scroll.CanvasSize = UDim2.new()
 scroll.ScrollingDirection = Enum.ScrollingDirection.Y
 scroll.ZIndex = 12
 scroll.Parent = popup
+if UiResponsive and UiResponsive.TouchScroll then UiResponsive.TouchScroll(scroll) end   -- easy thumb scrolling
 do
 	local pad = Instance.new("UIPadding")
 	pad.PaddingTop = UDim.new(0, 6)

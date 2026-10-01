@@ -1049,6 +1049,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.CanvasSize = UDim2.fromOffset(0, 0)
 scroll.ZIndex = 15
 scroll.Parent = body
+if UiResponsive and UiResponsive.TouchScroll then UiResponsive.TouchScroll(scroll) end   -- easy thumb scrolling
 
 local scrollLayout = Instance.new("UIListLayout")
 scrollLayout.Padding = UDim.new(0, 34)
@@ -1853,6 +1854,7 @@ end
 -- a small notice holds the place until it is.
 
 local storeOpenPending = false
+local storeOpenRequest = 0      -- bumped to cancel a held open
 local loadingGui = nil
 local loadingDots = nil
 local loadingRunning = false
@@ -1945,11 +1947,19 @@ local function openStoreCollapsed()
 	-- and EnsureGroup joins the preload already in flight rather than
 	-- launching another one.
 	storeOpenPending = true
+	storeOpenRequest += 1
+	local request = storeOpenRequest
 	setLoadingNotice(true)
 
 	UIAssets.EnsureGroup("SecretStore", function(failures)
+		-- A held open only goes ahead if it is still wanted: not cancelled
+		-- (another window was opened meanwhile, or Store tapped again) and
+		-- nothing else is open now. Without this, tapping Store and then
+		-- Playtime made the Store pop up over Playtime once its art arrived.
+		if request ~= storeOpenRequest or not storeOpenPending then return end
 		storeOpenPending = false
 		setLoadingNotice(false)
+		if GuiManager:GetCurrent() ~= nil then return end
 
 		if failures and #failures > 0 then
 			warn(("[StoreClient] opening with %d asset(s) missing; fallbacks in use."):format(#failures))
@@ -1959,10 +1969,22 @@ local function openStoreCollapsed()
 	end)
 end
 
+-- Opening any other window cancels a held Store open.
+local function cancelPendingStoreOpen()
+	if not storeOpenPending then return end
+	storeOpenPending = false
+	storeOpenRequest += 1
+	setLoadingNotice(false)
+end
+GuiManager.Changed:Connect(function(name)
+	if name ~= nil and name ~= "Store" then cancelPendingStoreOpen() end
+end)
+
 local storeButton = findStoreButton(15)
 
 if storeButton then
 	storeButton.Activated:Connect(function()
+		if storeOpenPending then cancelPendingStoreOpen() return end   -- second tap while loading = never mind
 		if GuiManager:GetCurrent() == "Store" or popup.Visible then
 			closeStoreCollapsed()
 		else

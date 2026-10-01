@@ -1228,6 +1228,7 @@ scroll.CanvasSize = UDim2.new()
 scroll.ScrollingDirection = Enum.ScrollingDirection.Y
 scroll.ZIndex = 12
 scroll.Parent = interior
+if UiResponsive and UiResponsive.TouchScroll then UiResponsive.TouchScroll(scroll) end   -- easy thumb scrolling
 
 -- The body lays out in a fixed 672-tall space and is scaled to whatever
 -- height the window actually got. See applyLayout.

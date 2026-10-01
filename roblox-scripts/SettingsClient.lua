@@ -345,6 +345,7 @@ body.CanvasSize = UDim2.new()
 body.AutomaticCanvasSize = Enum.AutomaticSize.Y
 body.ZIndex = 31
 body.Parent = panel
+if UiResponsive and UiResponsive.TouchScroll then UiResponsive.TouchScroll(body) end   -- easy thumb scrolling
 
 local list = Instance.new("UIListLayout")
 list.Padding = UDim.new(0, 8)

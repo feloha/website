@@ -2772,6 +2772,7 @@ local function makeColumn(key, titleText, order)
 	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
 	scroll.ZIndex = 15
 	scroll.Parent = column
+	if UiResponsive and UiResponsive.TouchScroll then UiResponsive.TouchScroll(scroll) end   -- easy thumb scrolling
 
 	local list = Instance.new("UIListLayout")
 	list.Padding = UDim.new(0, 7)

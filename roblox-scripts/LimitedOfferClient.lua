@@ -213,6 +213,13 @@ local function refreshLayout()
 		-- so subtracting its position gives this ScreenGui's coordinates.
 		local playtimeTopY = playtimeSlot.AbsolutePosition.Y - root.AbsolutePosition.Y
 		desiredCenterY = playtimeTopY - ABOVE_PLAYTIME_GAP - (holderHeight / 2)
+		-- Phones: Settings and Playtime fill the top of the right column, so
+		-- the offer goes UNDER Playtime instead of being squeezed on top of
+		-- (and covering) both buttons.
+		if UiResponsive and UiResponsive.Layout() == "compact" then
+			local playtimeBottomY = playtimeTopY + playtimeSlot.AbsoluteSize.Y
+			desiredCenterY = playtimeBottomY + 12 + (holderHeight / 2)
+		end
 	end
 
 	local minCenterY = (holderHeight / 2) + 12
