@@ -74,7 +74,8 @@ local function autoScale(guiObject)
 			math.min(vp.X / DESIGN.X, vp.Y / DESIGN.Y),
 			MIN_SCALE,
 			MAX_SCALE
-		) * (scaleMultipliers[guiObject] or 1)
+		) * math.clamp(math.min(vp.X / 1920, vp.Y / 1080), 1, 1.6)   -- grows past 1080p
+			* (scaleMultipliers[guiObject] or 1)
 	end
 
 	scaleRefreshers[guiObject] = refresh
@@ -1854,7 +1855,7 @@ local function buildUpgradeWindow()
 		{ 784, 28, 42, GOLD }, { 832, 84, 30, GOLD }, { 716, 46, 20, WHITE },
 		{ 900, 60, 18, WHITE }, { 1100, 110, 30, GOLD },
 		{ 1214, 152, 20, WHITE }, { 648, 22, 16, CYAN },
-	}) do
+		}) do
 		sparkle(header, s[1], s[2], s[3], s[4], Z.Header + 6, true)
 	end
 

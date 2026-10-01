@@ -1014,7 +1014,8 @@ local function refreshLayout()
 	dialog.Size = UDim2.fromOffset(dialogWidth, P.H)
 	layoutBubble()
 
-	local scale = math.clamp(math.min(screen.X / 1280, screen.Y / 720), 0.6, 1)
+	local boost = math.clamp(math.min(screen.X / 1920, screen.Y / 1080), 1, 1.6)
+	local scale = math.clamp(math.min(screen.X / 1280, screen.Y / 720), 0.6, 1) * boost
 	-- The dialog is designed at 1600x900: about half the screen wide anywhere.
 	-- (P.Scale shrinks it on computers and tablets; phones keep the full
 	-- size so the words stay readable.)
