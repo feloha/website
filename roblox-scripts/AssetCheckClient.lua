@@ -20,6 +20,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+-- Development tool: never runs for real players (its probe strip used to sit
+-- along the bottom of every player's screen).
+if not RunService:IsStudio() then return end
 local player = game:GetService("Players").LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -196,6 +199,7 @@ task.spawn(function()
 		print(("[AssetCheck] %s  %-26s %s"):format(if ok then "OK  " else "FAIL", entry.name, entry.id))
 	end
 	print(("[AssetCheck] %d ok, %d not rendering."):format(#entries - #failed, #failed))
+	probeGui:Destroy()   -- the verdict is in: take the strip off the screen
 
 	if #failed == 0 then
 		print("[AssetCheck] Everything renders. Press K to look.")

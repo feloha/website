@@ -36,7 +36,7 @@ local ZONES = {
 	{ "Playtime", "MainHUD", "PlaytimeSlot" },
 	{ "Settings", "SettingsHUD", "SettingsButtonHolder" },
 	{ "StatusColumn", "HudStack", "Column" },
-	{ "TutorialButton", "TutorialHUD", "TutorialButton" },
+	{ "TutorialButton", "TutorialButtonHUD", "TutorialButton" },
 }
 -- Pairs that are meant to touch/overlap (none for the normal HUD).
 local ALLOWED = {}

@@ -124,6 +124,10 @@ local TUNE = {
 	-- width is free real estate and goes straight into the cards.
 	DesignWidth = 1760,
 	DesignHeight = 1190,
+	-- Phones (landscape screens are short): a shorter window with the same
+	-- header. The products scroll, and the window can be drawn ~30% larger,
+	-- so cards and text are bigger instead of squeezed into a tall frame.
+	CompactDesignHeight = 900,
 	-- Share of the screen the window may use. Desktop matches the Upgrade and
 	-- Leaderboards windows; phones keep the full size (space is tight there).
 	WidthShare = 0.72,
@@ -478,7 +482,18 @@ root.BackgroundTransparency = 1
 root.Size = UDim2.fromScale(1, 1)
 root.Parent = gui
 
-local DESIGN_W, DESIGN_H = TUNE.DesignWidth, TUNE.DesignHeight
+-- Decided once, from the real screen: phones never change size class.
+local PHONE_STORE = false
+do
+	local cam = workspace.CurrentCamera
+	local waited = 0
+	while cam and cam.ViewportSize.X < 2 and waited < 3 do
+		waited += task.wait()
+	end
+	PHONE_STORE = UiResponsive ~= nil and UiResponsive.Layout ~= nil and UiResponsive.Layout() == "compact"
+end
+local DESIGN_W = TUNE.DesignWidth
+local DESIGN_H = if PHONE_STORE then TUNE.CompactDesignHeight else TUNE.DesignHeight
 
 -- Layer 1: the shadow the window lifts off.
 local windowShadow = frame(root, {
@@ -855,7 +870,7 @@ local function showToast(message, color)
 end
 
 -- ===================== HEADER =====================
-local headerHeight = math.floor(DESIGN_H * TUNE.HeaderHeight)
+local headerHeight = math.floor(TUNE.DesignHeight * TUNE.HeaderHeight)   -- same header on every screen
 
 local header = frame(content, {
 	Name = "Header",

@@ -1483,6 +1483,10 @@ local function buildUpgradeWindow()
 		}, parent)
 	end
 
+	-- Every card label's size limits, so the minimum can follow the window's
+	-- scale (refreshUpgradeScale): on a phone the boxes are small, and a fixed
+	-- minimum made text spill out of its box and overlap the next line.
+	local textLimits = {}
 	local function text(parent, name, str, x, y, w, h, size, color, z, props)
 		local label = make("TextLabel", {
 			Name = name,
@@ -1496,7 +1500,8 @@ local function buildUpgradeWindow()
 			TextWrapped = true,
 			ZIndex = z or 5,
 		}, parent)
-		make("UITextSizeConstraint", { MaxTextSize = size, MinTextSize = math.floor(size * 0.55) }, label)
+		local limit = make("UITextSizeConstraint", { MaxTextSize = size, MinTextSize = math.floor(size * 0.55) }, label)
+		textLimits[limit] = size
 		if props then
 			for key, value in pairs(props) do label[key] = value end
 		end
@@ -2473,6 +2478,11 @@ local function buildUpgradeWindow()
 		if scale == lastFit then return end
 		lastFit = scale
 		fitScale.Scale = scale
+		-- Text shrinks to fit its own box rather than overflowing it.
+		local shrink = math.min(1, scale)
+		for limit, size in pairs(textLimits) do
+			limit.MinTextSize = math.max(1, math.floor(size * 0.55 * shrink))
+		end
 	end
 	refreshUpgradeScale()
 	if UiResponsive then
@@ -3358,6 +3368,23 @@ local function placeTopActions()
 	end
 end
 actionBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeTopActions)
+
+-- Phones: a window (Store, Upgrade, Playtime, ...) is its own state. While
+-- one is open the gameplay HUD steps aside - action grid, top buttons,
+-- Playtime and the status column - so the window is the only thing competing
+-- for the small screen. The currencies stay (you see what you can spend).
+-- Settings and the tutorial button follow the same rule in their scripts.
+local function refreshModalHud()
+	local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+	local open = phone and GuiManager:GetCurrent() ~= nil
+	menu.Visible = not open
+	actionBar.Visible = not open
+	playSlot.Visible = not open
+	local stack = playerGui:FindFirstChild("HudStack")
+	if stack and stack:IsA("ScreenGui") then stack.Enabled = not open end
+end
+GuiManager.Changed:Connect(refreshModalHud)
+if UiResponsive then UiResponsive.Changed:Connect(refreshModalHud) end
 if UiResponsive then UiResponsive.Changed:Connect(function() task.defer(placeTopActions) end) end
 task.defer(placeTopActions)
 

@@ -280,7 +280,11 @@ end
 local function refreshScale()
 	local vp=fitArea()
 	if vp.X<1 or vp.Y<1 then return end
-	drawerDesktop=vp.X>=1100 and vp.Y>=650
+	-- The 2X offer goes BESIDE the card whenever that costs no size: big
+	-- screens, and landscape phones too (there the card is limited by height,
+	-- so the extra width is free). Only when it would shrink the card does it
+	-- fall back to overlapping the card's edge.
+	drawerDesktop=(vp.X>=1100 and vp.Y>=650) or popupScaleFor(LAYOUT.Width+336)>=popupScaleFor(LAYOUT.Width)*.97
 	local width=LAYOUT.Width+((drawerDesktop and not drawerDismissed) and 336 or 0)
 	wrapper.Size=UDim2.fromOffset(width,LAYOUT.Height)
 	responsive.Scale=popupScaleFor(width)

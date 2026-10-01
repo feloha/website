@@ -1057,7 +1057,7 @@ local resetText = makeText(resetPill, {
 	Name = "Text", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0),
 	Size = UDim2.fromOffset(240, 34), Text = "New day in --:--", ZIndex = 24,
 	TextColor3 = Color3.fromRGB(230, 244, 255),
-	MinTextSize = 13, MaxTextSize = 27, StrokeThickness = 3.5,
+	MinTextSize = 9, MaxTextSize = 27, StrokeThickness = 3.5,   -- 9: the time must never be cut off
 })
 
 local closeButton = GuiStyle.MakePlaytimeX(header, function() end)
@@ -1126,6 +1126,12 @@ strip.BackgroundColor3 = Color3.fromRGB(12, 22, 68)
 strip.BackgroundTransparency = 0.08
 strip.ZIndex = 12
 strip.Parent = interior
+-- Short windows (phones): header and strip are drawn smaller so the reward
+-- cards get the room (applyLayout).
+local headerFit = Instance.new("UIScale")
+headerFit.Parent = header
+local stripFit = Instance.new("UIScale")
+stripFit.Parent = strip
 GuiStyle.Corner(strip, 0.35)
 GuiStyle.Stroke(strip, C.CardEdge, 3)
 
@@ -2017,21 +2023,34 @@ local function applyLayout()
 	popup.Size = UDim2.fromOffset(width, height)
 	compact = width < 800
 
+	-- Short windows (landscape phones): the header and progress strip are
+	-- drawn at 72%, still full width, and the body starts higher - so the
+	-- reward cards get about twice the height instead of a thin strip.
+	local k = if height < 640 then 0.72 else 1
+	headerFit.Scale = k
+	header.Size = UDim2.new(1 / k, 0, 0, HEADER_H)
+	stripFit.Scale = k
+	strip.Position = UDim2.fromOffset(12, math.floor((HEADER_H + 14) * k + 0.5))
+	strip.Size = UDim2.new(1 / k, -24 / k, 0, 78)
+	local bodyTop = math.floor(BODY_TOP * k + 0.5)
+	scroll.Position = UDim2.fromOffset(10, bodyTop)
+
 	-- Header on narrow windows: the "New day in" pill drops to the subtitle's
 	-- row and shrinks, and the subtitle narrows, so title / subtitle / timer /
-	-- close never touch. The title keeps its full size.
-	local narrowHeader = width < 1100
+	-- close never touch. The title keeps its full size. (Measured in the
+	-- header's own units, which are wider when the header is drawn smaller.)
+	local narrowHeader = (width - 22) / k < 1100
 	resetPillFit.Scale = if narrowHeader then 0.74 else 1
 	resetPill.Position = if narrowHeader then UDim2.new(1, -104, 0, 129) else UDim2.new(1, -104, 0.5, 0)
 	local subtitle = header:FindFirstChild("Subtitle")
 	if subtitle then
-		subtitle.Size = UDim2.fromOffset(if narrowHeader then math.max(width - 170 - 104 - 250, 200) else 540, 34)
+		subtitle.Size = UDim2.fromOffset(if narrowHeader then math.max((width - 22) / k - 170 - 104 - 250, 200) else 540, 34)
 	end
 
 	-- Everything below lives inside the interior frame, which is inset 11 a
 	-- side, so the usable width is 22 less than the window's.
 	local innerWidth = width - 22
-	local bodyHeight = height - 22 - BODY_TOP - 10
+	local bodyHeight = height - 22 - bodyTop - 10
 	local featuredWidth = if compact then 0 else 400
 	local bodyWidth = innerWidth - 20 - (if compact then 0 else featuredWidth + 14)
 
@@ -2051,7 +2070,7 @@ local function applyLayout()
 	local localWidth = math.floor(bodyWidth / fit)
 	local localHeight = math.floor(bodyHeight / fit)
 	scroll.Size = UDim2.fromOffset(localWidth, localHeight)
-	featuredHolder.Position = UDim2.fromOffset(innerWidth - 10 - featuredWidth, BODY_TOP)
+	featuredHolder.Position = UDim2.fromOffset(innerWidth - 10 - featuredWidth, bodyTop)
 	featuredHolder.Size = UDim2.fromOffset(math.floor(featuredWidth / fit), localHeight)
 	featuredHolder.Visible = not compact
 

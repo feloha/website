@@ -971,7 +971,29 @@ replayButton.AutoButtonColor = false
 replayButton.Text = ""
 replayButton.Visible = false
 replayButton.ZIndex = 20
-replayButton.Parent = gui
+-- Its own layer at HUD level (MainHUD is 5), not in the tutorial's layer
+-- (45): it is a HUD button, so every window must cover it.
+do
+	local old = playerGui:FindFirstChild("TutorialButtonHUD")
+	if old then old:Destroy() end
+	local buttonGui = Instance.new("ScreenGui")
+	buttonGui.Name = "TutorialButtonHUD"
+	buttonGui.ResetOnSpawn = false
+	buttonGui.IgnoreGuiInset = true
+	buttonGui.DisplayOrder = 5
+	buttonGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	buttonGui.Parent = playerGui
+	replayButton.Parent = buttonGui
+	-- Phones: steps aside while a window is open, like the rest of the HUD.
+	if GuiManager and GuiManager.Changed then
+		local function refresh()
+			local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+			buttonGui.Enabled = not (phone and GuiManager:GetCurrent() ~= nil)
+		end
+		GuiManager.Changed:Connect(refresh)
+		if UiResponsive then UiResponsive.Changed:Connect(refresh) end
+	end
+end
 local replayScale = Instance.new("UIScale")
 replayScale.Parent = replayButton
 
@@ -1022,6 +1044,38 @@ local function refreshLayout()
 	local size = if compact then 1 else P.Scale
 	local panelScale = math.clamp(math.min(screen.X / 1600, screen.Y / 900) * size, 0.45, 1.35)
 	dialogScale.Scale = math.min(panelScale, (screen.X - 24) / dialogWidth, (screen.Y * (if compact then 0.36 else 0.3)) / P.H)
+
+	-- Phones: the dialog lives in the free space right of the left HUD zone
+	-- (grid + currencies), so Nibbles never lands on the Stardust counter.
+	-- Centred in that space, and only smaller if the space is narrower.
+	P.DialogShiftX = 0
+	if compact then
+		local hud = playerGui:FindFirstChild("MainHUD")
+		local leftLimit = 0
+		for _, name in ipairs({ "SideMenu", "StardustDisplay", "GemsDisplay" }) do
+			local object = hud and hud:FindFirstChild(name, true)
+			if object and object:IsA("GuiObject") and object.AbsoluteSize.X > 0 then
+				leftLimit = math.max(leftLimit, toGui(object.AbsolutePosition).X + object.AbsoluteSize.X)
+				if not P.ZoneWatched then
+					object:GetPropertyChangedSignal("AbsolutePosition"):Connect(function() task.defer(refreshLayout) end)
+					object:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(refreshLayout) end)
+				end
+			end
+		end
+		P.ZoneWatched = leftLimit > 0
+		if leftLimit > 0 then
+			local SP = if UiResponsive and UiResponsive.Space then UiResponsive.Space else { M = 12 }
+			local safeAt, safeSize = Vector2.zero, screen
+			if UiResponsive then safeAt, safeSize = UiResponsive.SafeRect() end
+			local spanLeft = leftLimit + SP.M
+			local spanRight = safeAt.X + safeSize.X - SP.M
+			local span = spanRight - spanLeft
+			if span > 100 then
+				dialogScale.Scale = math.min(dialogScale.Scale, span / dialogWidth)
+				P.DialogShiftX = math.floor((spanLeft + spanRight) / 2 - screen.X / 2 + 0.5)
+			end
+		end
+	end
 	miniScale.Scale = math.min(scale, (screen.X - 24) / math.max(mini.Size.X.Offset, 1))
 	replayScale.Scale = scale
 
@@ -2071,7 +2125,7 @@ local function render(dt)
 
 	-- Dialog slides up into place, and away while hidden.
 	dialogBottom = lerp(dialogBottom, if showDialog then bottomGap else -600, 1 - math.exp(-dt * 10))
-	dialog.Position = UDim2.new(0.5, 0, 1, -math.floor(dialogBottom))
+	dialog.Position = UDim2.new(0.5, P.DialogShiftX or 0, 1, -math.floor(dialogBottom))
 	dialog.Visible = dialogBottom > -560
 	mini.Visible = showMini
 

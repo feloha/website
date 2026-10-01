@@ -265,6 +265,17 @@ if UiResponsive then
 else
 	camera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshScale)
 end
+-- Phones: the gear steps aside while any window is open (MainHUD does the
+-- same for the rest of the gameplay HUD).
+if GuiManager and GuiManager.Changed then
+	local function refreshGearForModal()
+		local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+		gearHolder.Visible = not (phone and GuiManager:GetCurrent() ~= nil)
+	end
+	GuiManager.Changed:Connect(refreshGearForModal)
+	if UiResponsive then UiResponsive.Changed:Connect(refreshGearForModal) end
+end
+
 -- The phone gear follows MainHUD's Playtime button (same right stack).
 task.spawn(function()
 	local hud = playerGui:WaitForChild("MainHUD", 30)
