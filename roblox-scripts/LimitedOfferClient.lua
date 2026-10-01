@@ -200,8 +200,8 @@ local function refreshLayout()
 	end
 	if UiResponsive then
 		-- Stay clear of notches and rounded corners.
-		local safeOffset, safeSize = UiResponsive.SafeRect()
-		rightGap += math.max(UiResponsive.Screen().X - (safeOffset.X + safeSize.X), 0)
+		local safeOffset, safeSize = UiResponsive.SafeRectIn(gui)
+		rightGap += math.max(gui.AbsoluteSize.X - (safeOffset.X + safeSize.X), 0)
 	end
 
 	local holderHeight = CARD_H * scale

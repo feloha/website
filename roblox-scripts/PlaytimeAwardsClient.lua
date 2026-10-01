@@ -2002,6 +2002,97 @@ featuredScale.Parent = featuredHolder
 -- ===================== LAYOUT =====================
 local compact = false
 
+-- ===================== PHONE CARD ROW =====================
+-- Phones show the rewards as ONE sideways row. A grid gives every cell the
+-- same size, so the row uses a list instead: normal cards keep their own
+-- shape (305 wide), and the jackpot is a wider featured card at the end.
+local PHONE_ROW_H = 384            -- card height on phones (taller than 324: room to breathe)
+local PHONE_CARD_W = 305
+local PHONE_JACKPOT_W = 470        -- ~1.55 normal cards: the finale reward
+local phoneList = Instance.new("UIListLayout")
+phoneList.FillDirection = Enum.FillDirection.Horizontal
+phoneList.SortOrder = Enum.SortOrder.LayoutOrder
+phoneList.VerticalAlignment = Enum.VerticalAlignment.Top
+phoneList.Padding = UDim.new(0, 16)
+
+-- The jackpot's parts are laid out for its tall 400x686 desktop column. On
+-- phones they are re-arranged landscape: band on top, the gift (with its
+-- orbit and sparkles, moved and scaled as one group) on the left, icons and
+-- reward lines on the right, CLAIM across the bottom. Desktop geometry is
+-- remembered and put back.
+local savedGeometry = {}
+local function remember(object)
+	if not savedGeometry[object] then
+		savedGeometry[object] = { object.Position, object.Size, object.Visible }
+	end
+	return savedGeometry[object]
+end
+local GIFT_SCALE, GIFT_CENTRE, GIFT_TOP = 0.62, 0.27, 100   -- gift group: size, x share, top
+local function phoneJackpot(entry, on)
+	local card = entry.frame
+	for _, child in ipairs(card:GetChildren()) do
+		if child:IsA("GuiObject") then
+			local name = child.Name
+			local giftPart = name == "GiftFloat" or name == "Orbit" or name == "OrbitBloom"
+				or string.sub(name, 1, 9) == "OrbitStar" or string.sub(name, 1, 14) == "JackpotSparkle"
+			if giftPart then
+				local saved = remember(child)
+				if on then
+					local p, size = saved[1], saved[2]
+					-- Distance from the column's centre, in design px, scaled with the group.
+					local dx = (p.X.Scale - 0.5) * 400 + p.X.Offset
+					child.Position = UDim2.new(GIFT_CENTRE, dx * GIFT_SCALE, 0, GIFT_TOP + (p.Y.Offset - 104) * GIFT_SCALE)
+					child.Size = UDim2.new(size.X.Scale, size.X.Offset * GIFT_SCALE, size.Y.Scale, size.Y.Offset * GIFT_SCALE)
+				else
+					child.Position, child.Size = saved[1], saved[2]
+				end
+			elseif name == "Nebula" or name == "IconLight" then
+				local saved = remember(child)
+				if on then
+					child.Size = UDim2.new(saved[2].X.Scale, saved[2].X.Offset, 0, PHONE_ROW_H - saved[1].Y.Offset - 16)
+				else
+					child.Size = saved[2]
+				end
+			elseif name == "LowerLight" then
+				local saved = remember(child)
+				child.Visible = if on then false else saved[3]
+			end
+		end
+	end
+	-- The gift's gentle float follows its new spot (a new tween on the same
+	-- property replaces the running one).
+	local float = card:FindFirstChild("GiftFloat")
+	if float then
+		local base = savedGeometry[float] and savedGeometry[float][1] or float.Position
+		local x = if on then UDim2.new(GIFT_CENTRE, 0, 0, GIFT_TOP) else UDim2.new(0.5, 0, 0, 104)
+		float.Position = x + UDim2.fromOffset(0, 3 * (if on then GIFT_SCALE else 1))
+		TweenService:Create(float,
+			TweenInfo.new(2.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{ Position = x - UDim2.fromOffset(0, 3 * (if on then GIFT_SCALE else 1)) }):Play()
+		local _ = base
+	end
+	-- Right column: icons, then the reward lines, all readable width.
+	if entry.iconsRow then
+		local saved = remember(entry.iconsRow)
+		if on then
+			entry.iconsRow.Position = UDim2.new(0.74, 0, 0, 132)
+			entry.iconsRow.Size = UDim2.new(0.46, 0, 0, saved[2].Y.Offset)
+		else
+			entry.iconsRow.Position, entry.iconsRow.Size = saved[1], saved[2]
+		end
+	end
+	for i, line in ipairs(entry.lines or {}) do
+		local saved = remember(line.label)
+		if on then
+			line.label.Position = UDim2.new(0.74, 0, 0, 176 + (i - 1) * 26)
+			line.label.Size = UDim2.new(0.46, 0, 0, 24)
+			line.label.Visible = true
+		else
+			line.label.Position, line.label.Size = saved[1], saved[2]
+		end
+	end
+end
+
 local function applyLayout()
 	-- 1420 x 982, and both numbers are load-bearing:
 	--   width  - the interior is 1398, the featured column takes 400 plus a 14
@@ -2016,10 +2107,12 @@ local function applyLayout()
 	-- full-size cards (swiped sideways) - nothing is squashed to fit. One
 	-- scale factor for X and Y; margins are simply left around it.
 	local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
-	local PHONE_HEIGHT = 22 + BODY_TOP + (6 + 324 + 16) + 10   -- interior + header/strip + one card row
+	-- interior + header/strip (+10 breathing room) + one taller card row
+	local PHONE_HEIGHT = 22 + BODY_TOP + 10 + (6 + PHONE_ROW_H + 16) + 10
 	if phone then
-		local areaW, areaH = UiResponsive.ModalArea({ shareW = 0.9, shareH = 0.9 })
-		scale = math.min(1, (areaW - 32) / 1420, (areaH - 32) / PHONE_HEIGHT)
+		-- Nearly the whole usable height (a small margin stays visible), same width.
+		local areaW, areaH = UiResponsive.ModalArea({ shareW = 0.9, shareH = 1 })
+		scale = math.min(1, (areaW - 32) / 1420, (areaH - 30) / PHONE_HEIGHT)
 		width, height = 1420, PHONE_HEIGHT
 	elseif UiResponsive then
 		scale, width, height = UiResponsive.FitPanel(1420, 982, { minWidth = 560, minHeight = 380, margin = 16 })
@@ -2052,7 +2145,7 @@ local function applyLayout()
 	stripFit.Scale = k
 	strip.Position = UDim2.fromOffset(12, math.floor((HEADER_H + 14) * k + 0.5))
 	strip.Size = UDim2.new(1 / k, -24 / k, 0, 78)
-	local bodyTop = math.floor(BODY_TOP * k + 0.5)
+	local bodyTop = math.floor(BODY_TOP * k + 0.5) + (if phone then 10 else 0)
 	scroll.Position = UDim2.fromOffset(10, bodyTop)
 	-- The close button keeps a comfortable size inside the smaller header.
 	local closeSize = math.floor(62 * (if k < 1 then 0.85 / k else 1) + 0.5)
@@ -2091,11 +2184,15 @@ local function applyLayout()
 	-- height, so it keeps its proportions and stays in view.
 	local featuredFit = fit
 	if phone then
+		-- Cards at their real scale; the jackpot rides in the row (wider),
+		-- so the separate jackpot column is not used.
 		fit = 1
-		featuredFit = bodyHeight / DESIGN_BODY
-		featuredWidth = math.floor(400 * featuredFit)
-		bodyWidth = innerWidth - 20 - (featuredWidth + 14)
+		featuredFit = 1
+		featuredWidth = 0
+		bodyWidth = innerWidth - 20
 	end
+	grid.Parent = if phone then nil else scroll
+	phoneList.Parent = if phone then scroll else nil
 	scrollScale.Scale = fit
 	featuredScale.Scale = featuredFit
 	grid.FillDirection = if phone then Enum.FillDirection.Vertical else Enum.FillDirection.Horizontal
@@ -2111,7 +2208,7 @@ local function applyLayout()
 	scroll.Size = UDim2.fromOffset(localWidth, localHeight)
 	featuredHolder.Position = UDim2.fromOffset(innerWidth - 10 - featuredWidth, bodyTop)
 	featuredHolder.Size = UDim2.fromOffset(math.floor(featuredWidth / featuredFit), math.floor(bodyHeight / featuredFit))
-	featuredHolder.Visible = not compact
+	featuredHolder.Visible = not compact and not phone
 
 	-- Cards: as many 292px columns as fit, never fewer than two. All in the
 	-- scaled space, so a column is always a full-size card design.
@@ -2136,11 +2233,45 @@ local function applyLayout()
 		local rowFit = row and row:FindFirstChild("Fit")
 		local content = row and row:GetAttribute("ContentWidth")
 		if rowFit and type(content) == "number" and content > 0 then
-			local available = (if card.featured and not compact then math.floor(featuredWidth / featuredFit) else cellWidth) - 12
+			local available = (if card.featured and phone then math.floor(PHONE_JACKPOT_W * 0.46)
+				elseif card.featured and not compact then math.floor(featuredWidth / featuredFit)
+				else cellWidth) - 12
 			rowFit.Scale = math.clamp(available / content, 0.55, 1)
 		end
 
-		if card.featured then
+		if not card.featured then
+			if phone then card.frame.Size = UDim2.fromOffset(PHONE_CARD_W, PHONE_ROW_H) end
+		elseif phone then
+			-- The finale: last in the row, wider, laid out landscape.
+			card.frame.Parent = scroll
+			card.frame.LayoutOrder = 1000
+			card.frame.Size = UDim2.fromOffset(PHONE_JACKPOT_W, PHONE_ROW_H)
+			if card.title then card.title.Visible = true end
+			local art = card.frame:FindFirstChild("Art", true)
+			if art then art.Visible = true end
+			local cardStrip = card.frame:FindFirstChild("Strip")
+			if cardStrip then
+				cardStrip.Visible = true
+				cardStrip.Size = UDim2.new(1, -STRIP_INSET * 2, 0, 96)
+			end
+			-- CLAIM: same height as the normal cards' buttons, full width.
+			card.action.Size = UDim2.new(1, -22, 0, 54)
+			card.action.Position = UDim2.new(0.5, 0, 1, -10)
+			if BUTTON_ART then
+				card.claimButton.Size = UDim2.new(1, -8, 0, 86)
+				card.claimButton.Position = UDim2.new(0.5, 0, 1, -10 - 54 // 2)
+			else
+				card.claimButton.Size = UDim2.new(1, -22, 0, 54)
+				card.claimButton.Position = UDim2.new(0.5, 0, 1, -10)
+			end
+			phoneJackpot(card, true)
+			card.phoneLayout = true
+		else
+			if card.phoneLayout then
+				phoneJackpot(card, false)
+				card.phoneLayout = false
+				card.frame.LayoutOrder = 0
+			end
 			if compact then
 				-- A normal-size row in the list on small screens.
 				card.frame.Parent = scroll
@@ -2224,11 +2355,13 @@ local function auditProportions()
 			warn(("[PlaytimeAwards] DISTORTED %s: %.2f wide/tall, designed %.2f"):format(label, actual, expected))
 		end
 	end
+	local phoneRow = phoneList.Parent ~= nil
 	for index, card in pairs(cards) do
 		if card.featured then
-			if card.frame.Parent == featuredHolder then check("jackpot card", card.frame, 400 / 686) end
+			if phoneRow then check("jackpot card", card.frame, PHONE_JACKPOT_W / PHONE_ROW_H)
+			elseif card.frame.Parent == featuredHolder then check("jackpot card", card.frame, 400 / 686) end
 		else
-			check("card " .. tostring(index), card.frame, 305 / 324)
+			check("card " .. tostring(index), card.frame, if phoneRow then PHONE_CARD_W / PHONE_ROW_H else 305 / 324)
 		end
 	end
 	check("progress strip", strip, (popup.Size.X.Offset - 22 - 24) / 78)

@@ -3291,9 +3291,10 @@ local hudLayoutKey = nil
 
 local function applyHudLayout()
 	if not UiResponsive then return end
-	local safeOffset, safeSize = UiResponsive.SafeRect()
-	local screen = UiResponsive.Screen()
-	local rightInset = math.max(screen.X - (safeOffset.X + safeSize.X), 0)
+	-- In this ScreenGui's own coordinates (it may already start at the safe
+	-- edge), so the side zones sit at the real edges, not an inset further in.
+	local safeOffset, safeSize = UiResponsive.SafeRectIn(gui)
+	local rightInset = math.max(gui.AbsoluteSize.X - (safeOffset.X + safeSize.X), 0)
 	local compact = UiResponsive.Layout() == "compact"
 
 	local key = ("%s:%d:%d:%d"):format(tostring(compact), safeOffset.X, rightInset, UiResponsive.TopInset())
@@ -3310,17 +3311,19 @@ local function applyHudLayout()
 		--   TOP   : Upgrade / Lock Base, then the status column (HudStack)
 		-- Every gap comes from the one spacing scale.
 		local SP = UiResponsive.Space or { M = 12, L = 18 }
-		local zoneTop = math.max(UiResponsive.TopInset(), safeOffset.Y) + SP.L
+		-- Edge padding: ~2.5% of the usable width (never under the M gap).
+		local edge = math.max(SP.M, math.floor(safeSize.X * 0.025 + 0.5))
+		local zoneTop = math.max(UiResponsive.TopInset() - UiResponsive.ToScreen(gui.AbsolutePosition).Y, safeOffset.Y) + SP.L
 		layout.Parent = nil
 		menuGrid.Parent = menu
 		menuGrid.CellPadding = UDim2.fromOffset(SP.M, SP.M)
 		setIconOnly(true)
 		menu.AnchorPoint = Vector2.new(0, 0)
 		menu.Size = UDim2.fromOffset(88 * 2 + SP.M, 10)
-		menu.Position = UDim2.fromOffset(safeOffset.X + SP.M, zoneTop)
+		menu.Position = UDim2.fromOffset(safeOffset.X + edge, zoneTop)
 		-- Right stack: the gear (40) sits on top, so Playtime starts below it.
 		playSlot.AnchorPoint = Vector2.new(1, 0)
-		playSlot.Position = UDim2.new(1, -(rightInset + SP.M), 0, zoneTop + 40 + SP.M)
+		playSlot.Position = UDim2.new(1, -(rightInset + edge), 0, zoneTop + 40 + SP.M)
 		-- 0.7 of the new 228 is 160, which is what 0.8 of the old 196 came to, so
 		-- phones keep the size they had while desktop gets the bigger button.
 		-- Grid at full HUD scale: its cells stay comfortably tappable (~40-48 px).
@@ -3399,9 +3402,10 @@ local TUTORIAL_RESERVE = 84   -- the tutorial (Nibbles) button, bottom-left
 local function placeStardust()
 	local screen = camera.ViewportSize
 	if screen.X < 2 or menu.AbsoluteSize.Y < 2 then return end
-	local inset = GuiService:GetGuiInset().Y
-	local menuLeft = menu.AbsolutePosition.X
-	local menuBottom = inset + menu.AbsolutePosition.Y + menu.AbsoluteSize.Y
+	-- In this ScreenGui's own coordinates: an object's AbsolutePosition
+	-- minus the ScreenGui's, whatever area (safe / full) the ScreenGui uses.
+	local menuLeft = menu.AbsolutePosition.X - gui.AbsolutePosition.X
+	local menuBottom = menu.AbsolutePosition.Y - gui.AbsolutePosition.Y + menu.AbsoluteSize.Y
 	local height = top.AbsoluteSize.Y
 	local compact = UiResponsive and UiResponsive.Layout() == "compact"
 	local SP = UiResponsive and UiResponsive.Space or { M = 12, L = 18 }

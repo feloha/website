@@ -100,6 +100,19 @@ function UiResponsive.SafeRect()
 	return UiResponsive.ToScreen(safeProbe.AbsolutePosition), size
 end
 
+-- The device safe area in a ScreenGui's OWN coordinates. A ScreenGui with
+-- IgnoreGuiInset already starts at the safe edge on phones, so adding the
+-- full-screen safe inset again pushed edge-anchored HUD inward. This is
+-- right whichever area the ScreenGui actually uses.
+function UiResponsive.SafeRectIn(screenGui)
+	local position, size = UiResponsive.SafeRect()
+	local origin = Vector2.zero
+	if screenGui and screenGui:IsA("LayerCollector") then
+		origin = UiResponsive.ToScreen(screenGui.AbsolutePosition)
+	end
+	return position - origin, size
+end
+
 -- Height of Roblox's top bar (0 if it isn't shown).
 function UiResponsive.TopInset()
 	local size = coreProbe.AbsoluteSize

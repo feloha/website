@@ -214,13 +214,28 @@ end
 -- Four shades around a rectangular hole. The hole sits over the highlighted
 -- thing, so it stays at full brightness while everything else dims.
 -- The shades are not Active, so every click still reaches the game.
+-- The dimmer has its own TRUE full-screen layer. The tutorial's layer uses
+-- IgnoreGuiInset, which in Roblox means the device SAFE AREA - so a dimmer
+-- inside it stopped at the notch sides and above the home bar on phones,
+-- leaving bright strips. ScreenInsets None reaches every edge. It sits just
+-- under the tutorial (45), so Nibbles and the dialog stay on top.
+local dimGui = playerGui:FindFirstChild("TutorialDim")
+if dimGui then dimGui:Destroy() end
+dimGui = Instance.new("ScreenGui")
+dimGui.Name = "TutorialDim"
+dimGui.ResetOnSpawn = false
+dimGui.IgnoreGuiInset = true
+pcall(function() dimGui.ScreenInsets = Enum.ScreenInsets.None end)
+dimGui.DisplayOrder = 44
+dimGui.Parent = playerGui
+
 local dim = Instance.new("Frame")
 dim.Name = "Dim"
 dim.Size = UDim2.fromScale(1, 1)
 dim.BackgroundTransparency = 1
 dim.Visible = false
 dim.ZIndex = 1
-dim.Parent = gui
+dim.Parent = dimGui
 
 local shades = {}
 for _, name in ipairs({ "Top", "Bottom", "Left", "Right" }) do
@@ -2076,12 +2091,16 @@ local function render(dt)
 	shadeAlpha = lerp(shadeAlpha, targetAlpha, 1 - math.exp(-dt * 6))
 	dim.Visible = shadeAlpha < 0.99
 	if dim.Visible then
-		local x, y = math.floor(holeRect.x), math.floor(holeRect.y)
+		-- The hole is measured in the tutorial layer (safe area); the shades
+		-- live in the full-screen layer, so shift by where that layer starts.
+		local shift = origin.AbsolutePosition - dim.AbsolutePosition
+		local full = dim.AbsoluteSize
+		local x, y = math.floor(holeRect.x + shift.X), math.floor(holeRect.y + shift.Y)
 		local w, h = math.floor(holeRect.w), math.floor(holeRect.h)
-		setRect(shades.Top, 0, 0, screen.X, y)
-		setRect(shades.Bottom, 0, y + h, screen.X, screen.Y - y - h)
+		setRect(shades.Top, 0, 0, full.X, y)
+		setRect(shades.Bottom, 0, y + h, full.X, full.Y - y - h)
 		setRect(shades.Left, 0, y, x, h)
-		setRect(shades.Right, x + w, y, screen.X - x - w, h)
+		setRect(shades.Right, x + w, y, full.X - x - w, h)
 		for _, shade in pairs(shades) do
 			shade.BackgroundTransparency = shadeAlpha
 		end

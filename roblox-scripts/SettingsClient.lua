@@ -232,7 +232,7 @@ local function refreshScale()
 			local hud = playerGui:FindFirstChild("MainHUD")
 			local slot = hud and hud:FindFirstChild("PlaytimeSlot", true)
 			if slot and slot.AbsoluteSize.X > 0 then
-				local at = UiResponsive.ToScreen(slot.AbsolutePosition)
+				local at = slot.AbsolutePosition - gui.AbsolutePosition   -- in this ScreenGui's own coordinates
 				gearHolder.Position = UDim2.fromOffset(math.floor(at.X + slot.AbsoluteSize.X / 2 + 0.5), math.floor(at.Y - SP.M + 0.5))
 			else
 				gearHolder.Position = UDim2.new(1, -(right + SP.M + 20), 0, top + SP.L + 40)

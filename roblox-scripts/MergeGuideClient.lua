@@ -233,6 +233,7 @@ edgeGui.Name = "MergeGuideEdge"
 edgeGui.ResetOnSpawn = false
 edgeGui.IgnoreGuiInset = true
 edgeGui.DisplayOrder = 2
+pcall(function() edgeGui.ScreenInsets = Enum.ScreenInsets.None end)   -- positions are viewport coordinates
 edgeGui.Enabled = false
 edgeGui.Parent = playerGui
 
@@ -277,6 +278,7 @@ trailGui.Name = "MergeGuideTrail"
 trailGui.IgnoreGuiInset = true
 trailGui.ResetOnSpawn = false
 trailGui.DisplayOrder = 2
+pcall(function() trailGui.ScreenInsets = Enum.ScreenInsets.None end)   -- positions are viewport coordinates
 trailGui.Enabled = false
 trailGui.Parent = playerGui
 for index = 1, 8 do

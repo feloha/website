@@ -530,14 +530,43 @@ local Feedback = (function()
 		-- Size follows the screen (the panel's own shape is kept). Placement:
 		-- "TopRight" = the top-right corner, below Roblox's top bar, with
 		-- Margin (shares of the screen) kept clear; otherwise Position.
+		-- Phones get their own size and place for the meter (desktop and
+		-- tablets are unchanged): smaller, and anchored to the right edge under
+		-- the Playtime button so it never covers Settings / Playtime. The size
+		-- is the frame's own (root.Size), so the pop-in UIScale still animates
+		-- relative to it: 1 -> 1.1 -> 1 of the phone size, never desktop size.
+		local responsive do
+			local ok, module = pcall(function()
+				return require(game:GetService("ReplicatedStorage"):WaitForChild("UiResponsive", 5))
+			end)
+			responsive = if ok and type(module) == "table" then module else nil
+		end
+		local watchingSlot = false
 		local function resize()
 			local camera = workspace.CurrentCamera
 			local vp = if camera then camera.ViewportSize else Vector2.new(1920, 1080)
-			local s = math.clamp(math.min(vp.X / 1920, vp.Y / 1080), 0.55, 1.6)
+			local phone = responsive ~= nil and responsive.Layout() == "compact"
+			-- Height-led (a landscape phone is wide but short).
+			local s = math.clamp(math.min(vp.X / 1920, vp.Y / 1080), if phone then 0.4 else 0.55, 1.6)
 			local w = math.floor(WIDTH * s + 0.5)
 			local h = math.floor(WIDTH * s / aspect + 0.5)
 			root.Size = UDim2.fromOffset(w, h)
-			if Config.Meter.Placement == "TopRight" then
+			local hud = playerGui:FindFirstChild("MainHUD")
+			local slot = hud and hud:FindFirstChild("PlaytimeSlot")
+			if phone and slot and slot.AbsoluteSize.Y > 0 and responsive.SafeRectIn then
+				if not watchingSlot then
+					watchingSlot = true
+					slot:GetPropertyChangedSignal("AbsolutePosition"):Connect(resize)
+					slot:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+				end
+				-- In this ScreenGui's own coordinates.
+				local safeAt, safeSize = responsive.SafeRectIn(gui)
+				local edge = math.max(12, math.floor(safeSize.X * 0.025 + 0.5))
+				local right = safeAt.X + safeSize.X - edge
+				local below = slot.AbsolutePosition.Y - gui.AbsolutePosition.Y + slot.AbsoluteSize.Y + 12
+				root.AnchorPoint = Vector2.new(0.5, 0.5)   -- pops from its centre
+				root.Position = UDim2.fromOffset(math.floor(right - w / 2 + 0.5), math.floor(below + h / 2 + 0.5))
+			elseif Config.Meter.Placement == "TopRight" then
 				local margin = Config.Meter.Margin or Vector2.new(0.025, 0.025)
 				local inset = game:GetService("GuiService"):GetGuiInset().Y
 				root.AnchorPoint = Vector2.new(0.5, 0.5)   -- pops from its centre
@@ -550,6 +579,8 @@ local Feedback = (function()
 		if workspace.CurrentCamera then
 			workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize)
 		end
+		if responsive and responsive.Changed then responsive.Changed:Connect(function() task.defer(resize) end) end
+		task.delay(2, resize)   -- MainHUD's Playtime slot may be laid out after this
 
 		local art = Instance.new("ImageLabel")
 		art.Name = "Background"
