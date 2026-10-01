@@ -309,6 +309,9 @@ local function makeChunkyX(parent, position, size, zIndex)
 end
 
 -- ===== main ScreenGui =====
+-- If Output doesn't show this line, an older copy of MainHUD is running.
+print("[MainHUD] build 2026-10-01c  (studs on menu buttons, Gems left-aligned under Stardust)")
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
 gui.ResetOnSpawn = false
@@ -3438,6 +3441,7 @@ local BOTTOM_MARGIN = 12
 -- Where Gems sits under Stardust, as a share of the spare width between them:
 -- 0 = same left edge (as asked), 0.5 = centred.
 local GEMS_SHIFT = 0
+local P_GEMS_LOGGED = false
 
 local function placeStardust()
 	local screen = camera.ViewportSize
@@ -3474,6 +3478,10 @@ local function placeStardust()
 	-- Desktop: Gems starts at Stardust's left edge. Phones: one left edge for the
 	-- whole left zone (grid, Stardust, Gems).
 	local gemsX = if compact then x else x + (width - gemsSize.X) * GEMS_SHIFT
+	if not P_GEMS_LOGGED then
+		P_GEMS_LOGGED = true
+		print(("[MainHUD] Gems left edge %d, Stardust left edge %d"):format(math.floor(gemsX + 0.5), math.floor(x + 0.5)))
+	end
 	gemsPill.Position = UDim2.fromOffset(
 		math.floor(gemsX + 0.5),
 		math.floor(y + height + GEMS_GAP + gemsSize.Y / 2 + 0.5))

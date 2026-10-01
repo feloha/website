@@ -32,6 +32,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local TweenService = game:GetService("TweenService")
 
 local StudSurface = {}
+print("[StudSurface] build 2026-10-01c")
 
 StudSurface.AssetId = "rbxassetid://140302758156355"
 
@@ -175,6 +176,9 @@ function StudSurface.Apply(face, options)
 		corner.CornerRadius = UDim.new(0, math.max((opts.CornerRadius or 0) - inset, 0))
 	end
 	layout()
+	print(("[StudSurface] %s: %dx%d stud area, tile %s, transparency %.2f"):format(
+		face:GetFullName():gsub("^Players%.[^%.]+%.PlayerGui%.", ""), overlay.Size.X.Offset, overlay.Size.Y.Offset,
+		tostring(overlay.TileSize), opts.Transparency))
 	if not overlay:GetAttribute("StudWired") then
 		overlay:SetAttribute("StudWired", true)
 		face:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
