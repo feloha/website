@@ -288,6 +288,7 @@ local arrow = text(pointerGui, "Title", {
 arrow.TextScaled = true
 arrow.Visible = false
 
+
 -- ===================== DIALOG =====================
 -- The dialog is the illustrated galaxy panel with Nibbles overlapping its
 -- left edge. The panel picture carries its own border, glow and corners, so
@@ -295,6 +296,21 @@ arrow.Visible = false
 -- whole dialog is scaled to the screen (refreshLayout), so proportions never
 -- change.
 local P = {}   -- the panel's measurements (design px at 1600x900) and assets
+
+-- Spotlight weight by screen class. Phones: thinner ring and halo hugging the
+-- button, and a smaller pointer, so the highlight is feedback, not a frame.
+function P.RefreshSpotlight()
+	local phone = UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+	P.SpotPad = if phone then 4 else 10
+	P.RingOut = if phone then 2 else 4
+	ringStroke.Thickness = if phone then 2 else 3
+	haloStroke.Thickness = if phone then 3 else 6
+	halo.Size = if phone then UDim2.new(1, 8, 1, 8) else UDim2.new(1, 14, 1, 14)
+	arrow.Size = if phone then UDim2.fromOffset(28, 28) else UDim2.fromOffset(44, 44)
+end
+P.RefreshSpotlight()
+if UiResponsive and UiResponsive.Changed then UiResponsive.Changed:Connect(P.RefreshSpotlight) end
+
 -- Asset ids and art geometry live in UIAssets.TutorialArt.
 P.Assets = UIAssets.TutorialArt
 P.Art = UIAssets.TutorialArt.Geometry
@@ -2039,7 +2055,25 @@ local function refreshBottomGap()
 	end
 	if carryCard and guiShown(carryCard) then
 		local top = toGui(carryCard.AbsolutePosition).Y
-		gap = math.max(gap, origin.AbsoluteSize.Y - top + 12)
+		gap = math.max(gap, origin.AbsoluteSize.Y - top + (if compact then 18 else 12))
+		-- Phones: Nibbles goes up under the top HUD (and the event column)
+		-- instead of sitting on the Attack / Drop card, so the game shows
+		-- between the two. Only ever higher than stacking on the card.
+		if compact then
+			local limit = nil
+			for _, spot in ipairs({ { "HudStack", "Column" }, { "MainHUD", "TopActionButtons" } }) do
+				local layer = playerGui:FindFirstChild(spot[1])
+				local object = layer and layer:FindFirstChild(spot[2], true)
+				if object and guiShown(object) and object.AbsoluteSize.Y > 2 then
+					local bottom = toGui(object.AbsolutePosition).Y + object.AbsoluteSize.Y
+					limit = math.max(limit or bottom, bottom)
+				end
+			end
+			if limit then
+				local raised = origin.AbsoluteSize.Y - (limit + 8 + dialog.AbsoluteSize.Y)
+				gap = math.max(gap, raised)
+			end
+		end
 	end
 	bottomGap = gap
 end
@@ -2072,7 +2106,10 @@ local function render(dt)
 				low = Vector2.new(math.min(low.X, alsoLow.X), math.min(low.Y, alsoLow.Y))
 				high = Vector2.new(math.max(high.X, alsoHigh.X), math.max(high.Y, alsoHigh.Y))
 			end
-			tx, ty, tw, th = low.X - 10, low.Y - 10, high.X - low.X + 20, high.Y - low.Y + 20
+			-- Phones: the spotlight hugs the button instead of drawing a big
+			-- box around it (P.SpotPad, set from the screen class).
+			local pad = P.SpotPad or 10
+			tx, ty, tw, th = low.X - pad, low.Y - pad, high.X - low.X + pad * 2, high.Y - low.Y + pad * 2
 		elseif focus.world then
 			worldFocus = true
 			tx, ty, tw, th = worldRect(focus.world, focus.radius or 4)
@@ -2121,8 +2158,10 @@ local function render(dt)
 	ring.Visible = ringAlpha < 0.98 and holeRect.w > 12
 	if ring.Visible then
 		local pulse = if calm then 0 else math.sin(now * 3.5) * 3
-		ring.Position = UDim2.fromOffset(holeRect.x - 4 - pulse, holeRect.y - 4 - pulse)
-		ring.Size = UDim2.fromOffset(holeRect.w + 8 + pulse * 2, holeRect.h + 8 + pulse * 2)
+		local out = P.RingOut or 4
+		if P.SpotPad and P.SpotPad < 10 then pulse *= 0.5 end
+		ring.Position = UDim2.fromOffset(holeRect.x - out - pulse, holeRect.y - out - pulse)
+		ring.Size = UDim2.fromOffset(holeRect.w + out * 2 + pulse * 2, holeRect.h + out * 2 + pulse * 2)
 		ringStroke.Transparency = ringAlpha
 		haloStroke.Transparency = 0.65 + ringAlpha * 0.35
 	end
@@ -2260,7 +2299,7 @@ finish = function(skipped)
 end
 
 -- ===================== INPUT =====================
-primaryButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(primaryButton, "Tutorial Next", { Kind = "Action" }):Connect(function()
 	if not running then return end
 	local step = steps[stepIndex]
 	if step and (step.final or stepState.finishOnContinue) then
@@ -2271,17 +2310,17 @@ primaryButton.Activated:Connect(function()
 	end
 end)
 
-skipStepButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(skipStepButton, "Tutorial Skip Step", { Kind = "Action" }):Connect(function()
 	if running and not completing then
 		showStep(stepIndex + 1)
 	end
 end)
 
-skipAllButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(skipAllButton, "Tutorial Skip", { Kind = "Action" }):Connect(function()
 	finish(true)
 end)
 
-replayButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(replayButton, "Tutorial Replay", { Kind = "Action" }):Connect(function()
 	if not running then
 		start()
 	end

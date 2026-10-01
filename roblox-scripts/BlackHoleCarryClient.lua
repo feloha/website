@@ -333,6 +333,39 @@ end
 
 -- ===== CARD CONFIG =====
 
+local UiResponsive do
+	local module = ReplicatedStorage:FindFirstChild("UiResponsive")
+	local ok, result = pcall(function() return module and require(module) end)
+	UiResponsive = if ok and type(result) == "table" then result else nil
+end
+
+-- Two layouts of the same card, in design pixels.
+--   FULL     desktop / tablet with room to spare (the original card)
+--   COMPACT  phones, or whenever the tutorial / a crowded screen needs the
+--            room: narrower, a tight three-line stack, "★1.37K/s" without
+--            its label, slightly smaller buttons. Always the same box,
+--            whatever the name or number, so content never grows the card.
+local GEOMETRY = {
+	FULL = {
+		Width = 520, Height = 158, Pad = 18,
+		TitleTop = 12, TitleHeight = 32, TitleMax = 26, TitleMin = 14,
+		TierTop = 14, TierWidth = 72, TierHeight = 30,
+		PowerTop = 48, PowerHeight = 22, PowerMax = 18, PowerLabel = true, Divider = 80,
+		ButtonTop = 92, ButtonHeight = 50, ButtonDepth = 5, ButtonGap = 12, Icon = 30, Text = 26,
+	},
+	COMPACT = {
+		Width = 440, Height = 116, Pad = 14,
+		TitleTop = 8, TitleHeight = 26, TitleMax = 22, TitleMin = 10,
+		TierTop = 9, TierWidth = 54, TierHeight = 24,
+		PowerTop = 35, PowerHeight = 17, PowerMax = 15, PowerLabel = false, Divider = nil,
+		ButtonTop = 58, ButtonHeight = 44, ButtonDepth = 4, ButtonGap = 10, Icon = 24, Text = 22,
+	},
+}
+-- Phones: the card's height on screen as a share of the usable height (the
+-- binding axis on a landscape phone), and its width cap as a share of the
+-- usable width.
+local PHONE_FIT = { HeightShare = 0.21, WidthShare = 0.36, MinScale = 0.42, MaxScale = 0.8 }
+
 local CARD = {
 	Width = 520,
 	Height = 158,
@@ -433,11 +466,24 @@ local DESIGN = Vector2.new(1280, 720)
 local MIN_SCALE = 0.62
 local MAX_SCALE = 1
 
+local function isPhone()
+	return UiResponsive ~= nil and UiResponsive.Layout() == "compact"
+end
+
 local function refreshScale()
 	local vp = camera.ViewportSize
 	if vp.X < 1 then return end
 	local scale = math.clamp(math.min(vp.X / DESIGN.X, vp.Y / DESIGN.Y), MIN_SCALE, MAX_SCALE)
 		* math.clamp(math.min(vp.X / 1920, vp.Y / 1080), 1, 1.6)   -- grows past 1080p
+	if isPhone() then
+		-- Phones are short: size the compact card from the usable HEIGHT,
+		-- capped by width, instead of the desktop floor that made it huge.
+		local at, safe = UiResponsive.SafeRect()
+		local usableH = at.Y + safe.Y - math.max(at.Y, UiResponsive.TopInset())   -- below the top bar
+		local g = GEOMETRY.COMPACT
+		scale = math.clamp(math.min(usableH * PHONE_FIT.HeightShare / g.Height, safe.X * PHONE_FIT.WidthShare / g.Width),
+			PHONE_FIT.MinScale, PHONE_FIT.MaxScale)
+	end
 	rootScale.Scale = scale
 	-- A UIScale shrinks the frame it sits on too: size the root up by the same
 	-- factor so it still covers the whole screen and edge-anchored parts (the
@@ -447,6 +493,7 @@ end
 
 refreshScale()
 camera:GetPropertyChangedSignal("ViewportSize"):Connect(refreshScale)
+if UiResponsive and UiResponsive.Changed then UiResponsive.Changed:Connect(refreshScale) end
 
 -- ===== CARD =====
 
@@ -658,6 +705,20 @@ local function makeActionButton(key, order)
 	corner(face, 0.28)
 	local faceStroke = rawStroke(face, THEME.Rim, 2.5)
 
+	-- A slightly larger invisible touch area behind the face, so the button
+	-- can look compact and still be easy to hit. Kept inside half the gap to
+	-- the neighbouring button, so the two areas never overlap.
+	local hit = Instance.new("TextButton")
+	hit.Name = key .. "TouchArea"
+	hit.AnchorPoint = Vector2.new(0.5, 0.5)
+	hit.Position = UDim2.fromScale(0.5, 0.5)
+	hit.Size = UDim2.new(1, 8, 1, 12)
+	hit.BackgroundTransparency = 1
+	hit.Text = ""
+	hit.AutoButtonColor = false
+	hit.ZIndex = 3
+	hit.Parent = slot
+
 	local faceGrad = Instance.new("UIGradient")
 	faceGrad.Rotation = 90
 	faceGrad.Color = ColorSequence.new(style.Top, style.Bottom)
@@ -730,7 +791,7 @@ local function makeActionButton(key, order)
 	corner(flash, 0.28)
 
 	return {
-		style = style, slot = slot, slotScale = slotScale,
+		style = style, slot = slot, slotScale = slotScale, base = base, hit = hit, content = content,
 		pulse = pulse, glow = glow, face = face, faceStroke = faceStroke,
 		icon = icon, iconScale = iconScale, label = label, flash = flash,
 		hovering = false, pressed = false,
@@ -766,10 +827,19 @@ local function bindButton(button, onActivate)
 		tween(button.iconScale, MOTION.Hover, { Scale = 1 })
 	end)
 
-	face.MouseButton1Down:Connect(function()
+	local function press()
 		button.pressed = true
 		tween(button.slotScale, MOTION.Press, { Scale = 0.94 })
 		tween(button.face, MOTION.Press, { Position = UDim2.fromOffset(0, CARD.ButtonDepth - 1) })
+	end
+	face.MouseButton1Down:Connect(press)
+	button.hit.MouseButton1Down:Connect(press)
+	button.hit.InputEnded:Connect(function(input)
+		if button.pressed and (input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			button.pressed = false
+			restPose(button)
+		end
 	end)
 
 	-- Touch can lift off the button without a MouseLeave; never leave it pressed.
@@ -782,18 +852,72 @@ local function bindButton(button, onActivate)
 		end
 	end)
 
-	face.Activated:Connect(function()
+	local function activate()
 		button.pressed = false
 		play(clickSound)
 		button.flash.BackgroundTransparency = 0.45
 		tween(button.flash, MOTION.Flash, { BackgroundTransparency = 1 })
 		restPose(button)
 		onActivate()
-	end)
+	end
+	-- One tap lands on exactly one of the two (the face is on top), so this
+	-- never fires twice for a single press.
+	local router = require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter"))
+	router.Bind(face, button.style.Text, activate, { Kind = "Action" })
+	router.Bind(button.hit, button.style.Text, activate, { Kind = "Action" })
 end
 
 local attackButton = makeActionButton("Attack", 1)
 local dropButton = makeActionButton("Drop", 2)
+
+-- ===== FULL / COMPACT =====
+-- Phones always use COMPACT; elsewhere the layout manager asks for it while
+-- the tutorial shows or the screen is crowded.
+local managerVariant = "FULL"
+local cardVariant = nil
+local renderPower   -- defined with the card state below
+
+local function applyCardGeometry()
+	local name = if isPhone() or managerVariant == "COMPACT" then "COMPACT" else "FULL"
+	if name == cardVariant then return end
+	cardVariant = name
+	local g = GEOMETRY[name]
+	CARD.Width, CARD.Height, CARD.Pad = g.Width, g.Height, g.Pad
+	CARD.ButtonTop, CARD.ButtonHeight, CARD.ButtonDepth, CARD.ButtonGap = g.ButtonTop, g.ButtonHeight, g.ButtonDepth, g.ButtonGap
+
+	cardHolder.Size = UDim2.fromOffset(g.Width, g.Height)
+	title.Position = UDim2.fromOffset(g.Pad, g.TitleTop)
+	title.Size = UDim2.new(1, -(g.Pad * 2 + g.TierWidth + 12), 0, g.TitleHeight)
+	title.TextTruncate = Enum.TextTruncate.AtEnd
+	local titleCap = title:FindFirstChildOfClass("UITextSizeConstraint")
+	if titleCap then titleCap.MaxTextSize, titleCap.MinTextSize = g.TitleMax, g.TitleMin end
+
+	tierPill.Position = UDim2.new(1, -g.Pad, 0, g.TierTop)
+	tierPill.Size = UDim2.fromOffset(g.TierWidth, g.TierHeight)
+
+	power.Position = UDim2.fromOffset(g.Pad, g.PowerTop)
+	power.Size = UDim2.new(1, -g.Pad * 2, 0, g.PowerHeight)
+	local powerCap = power:FindFirstChildOfClass("UITextSizeConstraint")
+	if powerCap then powerCap.MaxTextSize = g.PowerMax end
+
+	divider.Visible = g.Divider ~= nil
+	if g.Divider then divider.Position = UDim2.fromOffset(g.Pad, g.Divider) end
+
+	local width = math.floor((g.Width - g.Pad * 2 - g.ButtonGap) / 2)
+	for order, button in ipairs({ attackButton, dropButton }) do
+		button.slot.Position = UDim2.fromOffset(g.Pad + (order - 1) * (width + g.ButtonGap), g.ButtonTop)
+		button.slot.Size = UDim2.fromOffset(width, g.ButtonHeight + g.ButtonDepth)
+		button.base.Position = UDim2.fromOffset(0, g.ButtonDepth)
+		button.base.Size = UDim2.new(1, 0, 0, g.ButtonHeight)
+		button.face.Size = UDim2.new(1, 0, 0, g.ButtonHeight)
+		-- Touch area: half the gap sideways, a few px up and down.
+		button.hit.Size = UDim2.new(1, g.ButtonGap - 2, 1, 12)
+		button.icon.Size = UDim2.fromOffset(g.Icon, g.Icon)
+		button.label.Size = UDim2.fromOffset(0, g.Icon)
+		button.label.TextSize = g.Text
+	end
+	if renderPower then renderPower(nil) end
+end
 
 -- ===== TOAST =====
 
@@ -849,12 +973,19 @@ local displayedPower = nil
 local powerValue = Instance.new("NumberValue")
 local powerTween = nil
 
-local function renderPower(value)
-	power.Text = string.format('Stellar Power: <font color="#FFD75A">★%s/s</font>', abbreviate(value))
+function renderPower(value)
+	value = value or powerValue.Value
+	if cardVariant == "COMPACT" then
+		power.Text = string.format('<font color="#FFD75A">★%s/s</font>', abbreviate(value))
+	else
+		power.Text = string.format('Stellar Power: <font color="#FFD75A">★%s/s</font>', abbreviate(value))
+	end
 end
 
 powerValue.Changed:Connect(renderPower)
 renderPower(0)
+applyCardGeometry()
+if UiResponsive and UiResponsive.Changed then UiResponsive.Changed:Connect(applyCardGeometry) end
 
 local function setPower(target, instant)
 	target = tonumber(target) or 0
@@ -944,6 +1075,13 @@ do
 			Home = CARD_HOME,
 			Candidates = { "BottomRight", "BottomLeft", "RightCenter", "LeftCenter" },
 			State = "INTERACTION",
+			Transient = true,
+			AvoidClearZone = true,                 -- stays below the game, never in the middle
+			CompactWithStates = { TUTORIAL = true },
+			SetVariant = function(variant)
+				managerVariant = variant
+				applyCardGeometry()
+			end,
 			Place = function(position)
 				CARD_POSITION = position
 				if cardShown then

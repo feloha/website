@@ -771,6 +771,7 @@ popupScale.Name = "ResponsiveScale"
 popupScale.Parent = popup
 
 GuiManager:Register("PlaytimeAwards", popupGroup, {
+	InputFrame = popup,   -- the panel owns presses, not the full-screen group
 	BlurSize = 12,
 	OpenScale = 0.9,
 	OpenOvershootScale = 1.02,
@@ -2905,7 +2906,7 @@ closeButton.Activated:Connect(closePopup)
 GuiManager:SetBackHandler("PlaytimeAwards", closePopup)
 
 if openButton then
-	openButton.Activated:Connect(function()
+	require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(openButton, "Open PlaytimeAwards"):Connect(function()
 		if GuiManager:GetCurrent() == "PlaytimeAwards" then
 			closePopup()
 		else

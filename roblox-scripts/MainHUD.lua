@@ -2965,7 +2965,7 @@ buildUpgradeWindow()
 -- Gamepad B closes it the same way as the X.
 GuiManager:SetBackHandler("Upgrade", closeUpgradePopup)
 
-upgradeBtn.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(upgradeBtn, "Open Upgrade"):Connect(function()
 	if GuiManager:GetCurrent() == "Upgrade" then
 		closeUpgradePopup()
 	else
@@ -3216,7 +3216,7 @@ end)
 
 local lockRequestInFlight = false
 
-lockBaseBtn.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(lockBaseBtn, "Lock Base", { Kind = "Action" }):Connect(function()
 	-- One request at a time: a second click while the first is still on its
 	-- way to the server is ignored rather than queued.
 	if lockRequestInFlight then return end

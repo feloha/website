@@ -794,7 +794,7 @@ if GuiManager and GuiManager.SetBackHandler then
 	GuiManager:SetBackHandler("Settings", closePanel)
 end
 
-gearBtn.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(gearBtn, "Open Settings"):Connect(function()
 
 	if isOpen then closePanel() else openPanel() end
 end)

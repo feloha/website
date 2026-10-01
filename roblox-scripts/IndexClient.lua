@@ -1305,7 +1305,7 @@ local function tryHook(instance)
 
 	hooked[instance] = true
 	liveButtons += 1
-	instance.Activated:Connect(toggleIndex)
+	require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(instance, "Open Index"):Connect(toggleIndex)
 
 	instance.Destroying:Connect(function()
 		if hooked[instance] then

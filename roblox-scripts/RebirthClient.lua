@@ -945,7 +945,7 @@ task.spawn(function()
 		warn("[RebirthClient] Couldn't find the Rebirth button in MainHUD.")
 		return
 	end
-	button.Activated:Connect(function()
+	require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(button, "Open Rebirth"):Connect(function()
 		if GuiManager:GetCurrent() == "Rebirth" then
 			closeWindow()
 		else

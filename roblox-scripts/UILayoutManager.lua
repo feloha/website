@@ -25,6 +25,9 @@
 --   HideInModal    hidden (SetHidden) while a major window is open
 --   Modal          this is a major window (only one shows; GuiManager does that)
 --   State          "TUTORIAL" | "INTERACTION" | "COMBAT" | "EVENT" while shown
+--   Transient      counts toward the occupancy budget (popping-up gameplay UI)
+--   CompactWithStates  { TUTORIAL = true }: compact whenever that state is on
+--   AvoidClearZone a movable entry never moves INTO the gameplay clear zone
 --   Home / Candidates / Place   see above. Candidate names: BottomCenter,
 --                  BottomRight, BottomLeft, RightCenter, LeftCenter,
 --                  TopCenter, Center. Home is always tried first.
@@ -39,6 +42,11 @@
 --      where it is now by a clear margin (hysteresis), and the move is a
 --      0.2 s tween.
 --   3. A fixed entry that is hit takes its compact form, then hides if it may.
+--   4. Occupancy budget: not overlapping is not enough. When the transient
+--      pieces together cover more than Layout.OccupancyBudget of the usable
+--      screen, every transient piece but the most important one goes compact.
+--   5. Gameplay clear zone: the middle of the screen (Layout.ClearZone) is
+--      kept for the game. Movable pieces with AvoidClearZone never move into it.
 --   Padding between pieces is responsive: 2.5% of the short side, 12-24 px.
 --
 -- Responsive scale and animation scale stay separate: a UIScale ON the
@@ -143,6 +151,20 @@ function Layout.UsableRect()
 	if UiResponsive then top = math.max(top, UiResponsive.TopInset()) end
 	return rect(at.X, top, at.X + safe.X, at.Y + safe.Y)
 end
+
+-- The middle of the usable screen, kept for the game itself. The tutorial may
+-- sit in it when it has to; contextual HUD (Attack / Drop) stays out.
+Layout.ClearShare = Vector2.new(0.4, 0.4)
+function Layout.ClearZone(usable)
+	usable = usable or Layout.UsableRect()
+	local w, h = usable.x1 - usable.x0, usable.y1 - usable.y0
+	local cw, ch = w * Layout.ClearShare.X, h * Layout.ClearShare.Y
+	local cx, cy = (usable.x0 + usable.x1) / 2, usable.y0 + h * 0.46
+	return rect(cx - cw / 2, cy - ch / 2, cx + cw / 2, cy + ch / 2)
+end
+
+-- Share of the usable screen transient pieces may cover together.
+Layout.OccupancyBudget = 0.3
 
 local function isTouch()
 	if UiResponsive and UiResponsive.InputMode then return UiResponsive.InputMode() == "Touch" end
@@ -256,10 +278,15 @@ local function scaled(r, factor)
 	return rect(c.X - hw, c.Y - hh, c.X + hw, c.Y + hh)
 end
 
-local function blocked(r, blockers, pad, skipReserved)
+-- isHome: an owner's designed spot only has to be free of real overlaps
+-- (reserved zones ignored), except next to transient pieces, which always get
+-- a visible gap. avoidClear: the gameplay clear zone counts as a blocker.
+local function blocked(r, blockers, pad, isHome, avoidClear)
 	for _, blocker in ipairs(blockers) do
-		if not (skipReserved and blocker.reserved) and hits(r, blocker.rect, pad) then
-			return blocker
+		local skip = (blocker.clearZone and not avoidClear) or (isHome and blocker.reserved)
+		if not skip then
+			local p = if isHome and not blocker.transient then 0 else pad
+			if hits(r, blocker.rect, p) then return blocker end
 		end
 	end
 	return nil
@@ -301,7 +328,7 @@ local function solveMovable(entry, blockers, usable, pad, factor)
 		-- Home is where its owner designed it: it only has to be free of real
 		-- overlaps. Every other spot keeps the full padding.
 		local ok = inside(option.rect, usable, if option.home then 1e6 else 1)
-			and not blocked(option.rect, blockers, if option.home then 0 else pad, option.home)
+			and not blocked(option.rect, blockers, pad, option.home, entry.opts.AvoidClearZone)
 		if ok then
 			local score = (centre(option.rect) - homeCentre).Magnitude + option.order * 4
 			if not bestScore or score < bestScore then
@@ -316,7 +343,7 @@ local function solveMovable(entry, blockers, usable, pad, factor)
 	if current and current.factor == factor then
 		local r = current.rect
 		local stillOk = (current.home or inside(r, usable, 1))
-			and not blocked(r, blockers, if current.home then 0 else pad, current.home)
+			and not blocked(r, blockers, pad, current.home, entry.opts.AvoidClearZone)
 		if stillOk then
 			local score = (centre(r) - homeCentre).Magnitude + (current.order or 1) * 4
 			if score <= bestScore + HYSTERESIS then return current end
@@ -406,6 +433,23 @@ local function solve()
 		stateEvent:Fire(state)
 	end
 
+	-- Occupancy: how much of the usable screen the transient pieces cover.
+	local usableArea = math.max((usable.x1 - usable.x0) * (usable.y1 - usable.y0), 1)
+	local covered, topTransient = 0, nil
+	for _, entry in ipairs(entries) do
+		if visible[entry] and entry.opts.Transient and not entry.hidden then
+			local r = measuredRect(entry)
+			if r then covered += (r.x1 - r.x0) * (r.y1 - r.y0) end
+			if not topTransient or entry.priority > topTransient.priority then topTransient = entry end
+		end
+	end
+	local occupancy = covered / usableArea
+	if occupancy > Layout.OccupancyBudget then
+		Layout._crowded = true
+	elseif occupancy < Layout.OccupancyBudget * 0.75 then
+		Layout._crowded = false   -- hysteresis: compact pieces are smaller, so leave only when clearly fine
+	end
+
 	-- State rules first: they decide what is in play at all.
 	for _, entry in ipairs(entries) do
 		local opts = entry.opts
@@ -414,7 +458,9 @@ local function solve()
 		if opts.CanHide or opts.HideInModal or opts.HideInTutorial then
 			entry.stateHidden = hideByState and true or false
 		end
-		entry.wantCompact = state == "TUTORIAL" and opts.Optional == true
+		entry.wantCompact = (state == "TUTORIAL" and opts.Optional == true)
+			or (opts.CompactWithStates ~= nil and opts.CompactWithStates[state] == true)
+			or (Layout._crowded == true and opts.Transient == true and entry ~= topTransient)
 	end
 
 	local sorted = {}
@@ -428,6 +474,8 @@ local function solve()
 	for _, zone in ipairs(reserved) do
 		table.insert(blockers, { name = zone.name, rect = zone.rect, reserved = true })
 	end
+	local clearZone = Layout.ClearZone(usable)
+	table.insert(blockers, { name = "GameplayClearZone", rect = clearZone, reserved = true, clearZone = true })
 
 	local final = {}           -- [entry] = rect actually used
 	for _, entry in ipairs(sorted) do
@@ -439,6 +487,7 @@ local function solve()
 		elseif entry.stateHidden then
 			setHidden(entry, true)
 		elseif opts.CanMove and entry.home then
+			setVariant(entry, if entry.wantCompact then "COMPACT" else "FULL")
 			local target
 			local factor = 1
 			while true do
@@ -464,7 +513,8 @@ local function solve()
 		else
 			local r = measuredRect(entry)
 			if r then
-				local hit = blocked(r, blockers, 0, true)   -- real overlaps only
+				local hit = blocked(r, blockers, 0, true, false)   -- real overlaps only
+				if hit and hit.reserved then hit = nil end
 				-- Compact while something important sits on it; back to full
 				-- only once that thing is gone or clearly clear of it.
 				if hit and opts.SetVariant then
@@ -487,7 +537,7 @@ local function solve()
 			end
 		end
 		if final[entry] then
-			table.insert(blockers, { name = entry.name, rect = final[entry], entry = entry })
+			table.insert(blockers, { name = entry.name, rect = final[entry], entry = entry, transient = opts.Transient == true })
 		end
 	end
 
@@ -515,7 +565,8 @@ local function solve()
 		collisions = now
 	end
 
-	Layout._last = { usable = usable, reserved = reserved, final = final, sorted = sorted, pad = pad }
+	Layout._last = { usable = usable, reserved = reserved, final = final, sorted = sorted, pad = pad,
+		clearZone = clearZone, occupancy = occupancy }
 	if debugDraw then debugDraw() end
 	solvedEvent:Fire(state)
 end
@@ -704,7 +755,9 @@ if RunService:IsStudio() then
 		gui:ClearAllChildren()
 		local last = Layout._last
 		if not last then return end
-		box(last.usable, Color3.fromRGB(80, 160, 255), "usable  pad " .. last.pad, 1)
+		box(last.usable, Color3.fromRGB(80, 160, 255), ("usable  pad %d  occupancy %d%%%s"):format(last.pad,
+			math.floor(last.occupancy * 100 + 0.5), if Layout._crowded then "  CROWDED" else ""), 1)
+		box(last.clearZone, Color3.fromRGB(255, 220, 90), "gameplay clear zone", 1)
 		for _, zone in ipairs(last.reserved) do
 			box(zone.rect, Color3.fromRGB(160, 160, 160), zone.name .. " (reserved)", 1)
 		end

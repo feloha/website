@@ -237,6 +237,7 @@ popupScale.Name = "ResponsiveScale"
 popupScale.Parent = popup
 
 GuiManager:Register("Inventory", popupGroup, {
+	InputFrame = popup,   -- the panel owns presses, not the full-screen group
 	BlurSize = 12,
 	OpenScale = 0.9,
 	OpenOvershootScale = 1.02,
@@ -1205,7 +1206,7 @@ task.spawn(function()
 		warn("[InventoryClient] Couldn't find the Inventory button in MainHUD. Update MainHUD.")
 		return
 	end
-	button.Activated:Connect(function()
+	require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(button, "Open Inventory"):Connect(function()
 		if GuiManager:GetCurrent() == "Inventory" then
 			closePopup()
 		else

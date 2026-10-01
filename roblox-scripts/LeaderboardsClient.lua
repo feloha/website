@@ -3269,7 +3269,7 @@ if not leaderboardsButton then
 	return
 end
 
-leaderboardsButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(leaderboardsButton, "Open Leaderboards"):Connect(function()
 	if GuiManager:GetCurrent() == "Leaderboards" then
 		GuiManager:Close("Leaderboards")
 	else

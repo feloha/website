@@ -2129,7 +2129,7 @@ end)
 local storeButton = findStoreButton(15)
 
 if storeButton then
-	storeButton.Activated:Connect(function()
+	require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(storeButton, "Open Store"):Connect(function()
 		if storeOpenPending then cancelPendingStoreOpen() return end   -- second tap while loading = never mind
 		if GuiManager:GetCurrent() == "Store" or popup.Visible then
 			closeStoreCollapsed()

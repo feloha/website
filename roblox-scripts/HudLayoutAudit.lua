@@ -8,6 +8,7 @@
 --   COREGUI      a zone sits under / right against Roblox's menu, chat, mic
 --   OUTSIDE      a zone leaves the device safe area or touches a screen edge
 --   GAMEPLAY     a zone intrudes into the clear centre of the screen
+-- Ctrl+H shows every real button hitbox (overlaps in red; see the bottom).
 -- It re-runs by itself when the screen size changes (switch devices in the
 -- Device Emulator and watch Output), and Ctrl+L runs it on demand.
 
@@ -164,3 +165,118 @@ UserInputService.InputBegan:Connect(function(input)
 	end
 	print(("[TapTrace] tap (%d,%d) -> %s"):format(at.X, at.Y, if #names > 0 then table.concat(names, " | ") else "nothing clickable"))
 end)
+
+-- ===================== HITBOX VISUALISER =====================
+-- Ctrl+H: draws the REAL clickable rectangle (AbsolutePosition/AbsoluteSize)
+-- of every button that can take a tap right now, labelled with its name (and
+-- its routed action). Two hitboxes that overlap are drawn red and printed:
+--   HITBOX OVERLAP: MainHUD.PlaytimeSlot.Playtime Awards <-> LimitedOfferUI...
+-- A button's own touch area next to its face (same parent) is not counted.
+do
+	local Router do
+		local module = ReplicatedStorage:FindFirstChild("UIInputRouter")
+		local ok, result = pcall(function() return module and require(module) end)
+		Router = if ok and type(result) == "table" then result else nil
+	end
+
+	local overlay = Instance.new("ScreenGui")
+	overlay.Name = "HitboxDebug"
+	overlay.ResetOnSpawn = false
+	overlay.IgnoreGuiInset = true
+	pcall(function() overlay.ScreenInsets = Enum.ScreenInsets.None end)
+	overlay.DisplayOrder = 1001
+	overlay.Enabled = false
+	overlay.Parent = playerGui
+
+	local function takesInput(button)
+		if not button.Active or button:GetAttribute("InputCatcher") then return false end
+		local node = button
+		while node do
+			if node:IsA("GuiObject") then
+				if not node.Visible then return false end
+				local ok, value = pcall(function() return node.Interactable end)
+				if ok and value == false then return false end
+			end
+			if node:IsA("LayerCollector") then
+				return node.Enabled and node ~= overlay and node.Name ~= "UILayoutDebug"
+			end
+			node = node.Parent
+		end
+		return false
+	end
+
+	local warned = {}
+	local function draw()
+		overlay:ClearAllChildren()
+		local actions = {}
+		if Router and Router.Bindings then
+			for _, item in ipairs(Router.Bindings()) do actions[item.button] = item.action end
+		end
+		local list = {}
+		for _, object in ipairs(playerGui:GetDescendants()) do
+			if object:IsA("GuiButton") and object.AbsoluteSize.X > 2 and object.AbsoluteSize.Y > 2 and takesInput(object) then
+				table.insert(list, { button = object, rect = rectOf(object) })
+			end
+		end
+		local bad = {}
+		for i = 1, #list do
+			for j = i + 1, #list do
+				local a, b = list[i], list[j]
+				local related = a.button:IsDescendantOf(b.button) or b.button:IsDescendantOf(a.button)
+					or a.button.Parent == b.button.Parent
+				if a.rect and b.rect and not related and intersects(a.rect, b.rect) then
+					bad[a.button], bad[b.button] = true, true
+					local key = a.button:GetFullName() .. "|" .. b.button:GetFullName()
+					if not warned[key] then
+						warned[key] = true
+						local short = function(o) return (o:GetFullName():gsub("^Players%.[^%.]+%.PlayerGui%.", "")) end
+						warn(("HITBOX OVERLAP: %s <-> %s"):format(short(a.button), short(b.button)))
+					end
+				end
+			end
+		end
+		for _, item in ipairs(list) do
+			local r = item.rect
+			if r then
+				local f = Instance.new("Frame")
+				f.Active = false
+				f.BackgroundColor3 = if bad[item.button] then Color3.fromRGB(255, 60, 60) else Color3.fromRGB(60, 200, 255)
+				f.BackgroundTransparency = 0.8
+				f.Position = UDim2.fromOffset(r.x0, r.y0)
+				f.Size = UDim2.fromOffset(r.x1 - r.x0, r.y1 - r.y0)
+				f.Parent = overlay
+				local s = Instance.new("UIStroke")
+				s.Color = f.BackgroundColor3
+				s.Thickness = 1
+				s.Parent = f
+				local t = Instance.new("TextLabel")
+				t.BackgroundTransparency = 0.4
+				t.BackgroundColor3 = Color3.new(0, 0, 0)
+				t.TextColor3 = Color3.new(1, 1, 1)
+				t.Font = Enum.Font.GothamBold
+				t.TextSize = 10
+				t.AutomaticSize = Enum.AutomaticSize.XY
+				t.Size = UDim2.new()
+				t.Text = " " .. string.upper(actions[item.button] or item.button.Name) .. " "
+				t.Parent = f
+			end
+		end
+	end
+
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.H and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+			overlay.Enabled = not overlay.Enabled
+			print("[HudLayoutAudit] hitboxes " .. (if overlay.Enabled then "on (red = overlapping)" else "off"))
+			if overlay.Enabled then
+				task.spawn(function()
+					while overlay.Enabled do
+						draw()
+						task.wait(1)
+					end
+					overlay:ClearAllChildren()
+				end)
+			end
+		end
+	end)
+end

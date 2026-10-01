@@ -911,7 +911,7 @@ buyButton.Activated:Connect(function()
 	purchaseOfferRemote:FireServer(currentOfferId)
 end)
 
-cardTapButton.Activated:Connect(function()
+require(game:GetService("ReplicatedStorage"):WaitForChild("UIInputRouter")).Signal(cardTapButton, "Open LimitedOffer", { Kind = "Action" }):Connect(function()
 	if not currentOfferId then return end
 
 	print("[LimitedOfferClient] Offer card tapped:", currentOfferId)
