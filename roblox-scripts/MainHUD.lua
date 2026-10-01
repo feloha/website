@@ -310,7 +310,7 @@ end
 
 -- ===== main ScreenGui =====
 -- If Output doesn't show this line, an older copy of MainHUD is running.
-print("[MainHUD] build 2026-10-01c  (studs on menu buttons, Gems left-aligned under Stardust)")
+print("[MainHUD] build 2026-10-01d  (drawn studs on menu buttons, Gems left-aligned under Stardust)")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
