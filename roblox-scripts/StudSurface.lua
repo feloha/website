@@ -9,14 +9,15 @@
 --       CornerRadius = 28, RimInset = 5, -- the face's curve and inner rim
 --       Behind = "fade",                -- or "hide": what studs under content do
 --       Marks = { { 1, 1, 14 } },       -- "+" marks: { gap column, gap row, size }
+--       KeepOut = { frame, ... },       -- plain boxes to keep clear (artwork)
 --   })
 --
 -- Each stud is drawn, not a texture (the tiled texture rbxassetid://140302758156355
 -- rendered as fine ridges at button size):
---   Shadow     contact shadow in a darker shade of the same plastic, down-right
---   Body       the button's own colour, lit upper-left, shaded lower-right,
---              with a faint rim - molded from the face, not glued on
---   Highlight  a soft white crescent on the upper-left shoulder
+--   Shadow     soft contact shadow, down-right
+--   Wall       the dome's darker side, a crescent lower-right
+--   Dome       the lit top in the button's own colour, nudged up-left
+--   Glint      a crisp white highlight on the upper-left shoulder
 --
 -- Layout (recomputed only when the tile's design size or its name changes -
 -- never during hover / press, so nothing blinks):
@@ -37,7 +38,7 @@
 local TextService = game:GetService("TextService")
 
 local StudSurface = {}
-print("[StudSurface] build 2026-10-01g (reference pass)")
+print("[StudSurface] build 2026-10-01h (glossy domes)")
 
 StudSurface.AssetId = "rbxassetid://140302758156355"
 StudSurface.StudImage = nil
@@ -94,6 +95,11 @@ local function round(parent, name, size, position, color, z, transparency)
 	return f
 end
 
+-- One stud: a glossy molded dome, lit from the upper-left.
+--   Shadow  soft contact shadow, down-right
+--   Wall    the dome's darker side, showing as a crescent lower-right
+--   Dome    the lit top, slightly smaller and nudged up-left
+--   Glint   a crisp white highlight on the upper-left shoulder
 local function buildStud(layer, x, y, d, color, faded)
 	local stud = Instance.new("Frame")
 	stud.Name = "Stud"
@@ -107,9 +113,10 @@ local function buildStud(layer, x, y, d, color, faded)
 	local square = Instance.new("UIAspectRatioConstraint")   -- always a circle
 	square.AspectRatio = 1
 	square.Parent = stud
+	local fade = if faded then 0.55 else 0
 
-	round(stud, "Shadow", UDim2.fromScale(1, 1), UDim2.new(0.5, d * 0.07, 0.5, d * 0.11), color:Lerp(INK, 0.5), 1,
-		if faded then 0.82 else 0.45)
+	round(stud, "Shadow", UDim2.fromScale(1.04, 1.04), UDim2.new(0.5, d * 0.07, 0.5, d * 0.13), color:Lerp(INK, 0.6), 1,
+		if faded then 0.85 else 0.5)
 
 	if StudSurface.StudImage then
 		local picture = Instance.new("ImageLabel")
@@ -120,7 +127,7 @@ local function buildStud(layer, x, y, d, color, faded)
 		picture.BackgroundTransparency = 1
 		picture.Image = StudSurface.StudImage
 		picture.ImageColor3 = color
-		picture.ImageTransparency = if faded then 0.55 else 0
+		picture.ImageTransparency = fade
 		picture.ScaleType = Enum.ScaleType.Fit
 		picture.Active = false
 		picture.ZIndex = 2
@@ -128,28 +135,29 @@ local function buildStud(layer, x, y, d, color, faded)
 		return stud
 	end
 
-	local body = round(stud, "Body", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), WHITE, 2, if faded then 0.55 else 0)
-	local shade = Instance.new("UIGradient")
-	shade.Rotation = 45
-	shade.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, color:Lerp(WHITE, 0.5)),
-		ColorSequenceKeypoint.new(0.4, color:Lerp(WHITE, 0.08)),
-		ColorSequenceKeypoint.new(1, color:Lerp(INK, 0.2)),
-	})
-	shade.Parent = body
-	local rim = Instance.new("UIStroke")
-	rim.Color = color:Lerp(INK, 0.35)
-	rim.Thickness = math.max(1, d * 0.05)
-	rim.Transparency = if faded then 0.85 else 0.55
-	rim.Parent = body
+	local wall = round(stud, "Wall", UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5), color:Lerp(INK, 0.32), 2, fade)
+	local wallShade = Instance.new("UIGradient")
+	wallShade.Rotation = 45
+	wallShade.Color = ColorSequence.new(color:Lerp(INK, 0.05), color:Lerp(INK, 0.42))
+	wallShade.Parent = wall
 
-	local glint = round(body, "Highlight", UDim2.fromScale(0.42, 0.24), UDim2.fromScale(0.36, 0.27), WHITE, 3,
-		if faded then 0.75 else 0.3)
-	glint.Rotation = -38
-	local fade = Instance.new("UIGradient")
-	fade.Rotation = 90
-	fade.Transparency = NumberSequence.new(0, 0.7)
-	fade.Parent = glint
+	local dome = round(stud, "Dome", UDim2.fromScale(0.84, 0.84), UDim2.fromScale(0.46, 0.45), WHITE, 3, fade)
+	local domeShade = Instance.new("UIGradient")
+	domeShade.Rotation = 45
+	domeShade.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, color:Lerp(WHITE, 0.4)),
+		ColorSequenceKeypoint.new(0.5, color:Lerp(WHITE, 0.06)),
+		ColorSequenceKeypoint.new(1, color:Lerp(INK, 0.06)),
+	})
+	domeShade.Parent = dome
+
+	local glint = round(stud, "Glint", UDim2.fromScale(0.36, 0.2), UDim2.fromScale(0.36, 0.29), WHITE, 4,
+		if faded then 0.7 else 0.08)
+	glint.Rotation = -40
+	local glintFade = Instance.new("UIGradient")
+	glintFade.Rotation = 90
+	glintFade.Transparency = NumberSequence.new(0, 0.55)
+	glintFade.Parent = glint
 	return stud
 end
 
@@ -283,9 +291,17 @@ function StudSurface.Apply(face, options)
 			local labelRect = textRect(opts.Label, face, k)
 			local iconRect = if opts.Behind == "hide" then coreRect(opts.Icon, face, k, opts.IconCore) else nil
 			local pad = opts.AvoidPad
+			local zones = {}
+			for _, zone in ipairs(opts.KeepOut or {}) do
+				local zAt, zSize = localRect(zone, face, k)
+				if zAt then table.insert(zones, { zAt.X, zAt.Y, zAt.X + zSize.X, zAt.Y + zSize.Y }) end
+			end
 			local function covered(x, y)
 				if labelRect and circleHits(x, y, r + pad, labelRect) then return true end
 				if iconRect and circleHits(x, y, r + pad, iconRect) then return true end
+				for _, zone in ipairs(zones) do
+					if circleHits(x, y, r + pad, zone) then return true end
+				end
 				return false
 			end
 
@@ -297,8 +313,9 @@ function StudSurface.Apply(face, options)
 					grid[row][column] = { x = x, y = y, keep = insideCurve(x, y), under = covered(x, y) }
 				end
 			end
-			-- Mirror the content decision left/right, so both sides match.
-			for row = 0, rows - 1 do
+			-- Mirror the content decision left/right, so both sides match
+			-- (off for artwork that is itself asymmetric).
+			for row = 0, if opts.Mirror == false then -1 else rows - 1 do
 				for column = 0, columns - 1 do
 					local cell, twin = grid[row][column], grid[row][columns - 1 - column]
 					cell.under = cell.under or twin.under

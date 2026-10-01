@@ -313,7 +313,7 @@ end
 
 -- ===== main ScreenGui =====
 -- If Output doesn't show this line, an older copy of MainHUD is running.
-print("[MainHUD] build 2026-10-01g  (reference pass: nav + Playtime)")
+print("[MainHUD] build 2026-10-01h  (glossy stud domes; Playtime artwork 124105198585397 + studs)")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "MainHUD"
@@ -666,7 +666,10 @@ local NAV = {
 	StreakSize = Vector2.new(40, 8),
 	-- "+" marks in the stud grid's gaps: { gap column, gap row, size };
 	-- a negative column counts from the right.
-	Marks = { { 1, 1, 15 }, { -1, 0, 15 }, { -1, 1, 9 } },
+	Marks = { { 1, 1, 13 }, { -2, 0, 13 }, { -1, 1, 8 } },
+	-- The reference grid: about 9 x 4 glossy studs, kept clear of the icon
+	-- and the name (mirrored, so both sides always match).
+	Stud = { SizeShare = 0.125, MinDiameter = 10, PitchShare = 1.7, MaxColumns = 9, MaxRows = 4, Behind = "hide", IconCore = 0.75 },
 }
 -- spec (optional) overrides NAV for a differently sized tile (Playtime
 -- Awards): Width, DisplayText, Plus = { {x, y, size}, ... }, Stud = {...}.
@@ -1276,22 +1279,116 @@ local playShadow = addShadow(playSlot)
 -- Playtime Awards: the same molded, studded plastic as the side menu (the
 -- old one-piece PNG had the gift and lettering baked in, so studs could not
 -- go behind them). Gift icon and name sit on the studs.
-local PLAYTIME_TILE = Vector2.new(288, 200)   -- the size knob; the reference's ~1.44:1
-playSlot.Size = UDim2.fromOffset(PLAYTIME_TILE.X, PLAYTIME_TILE.Y)
--- The full-colour gift (cream box, red bow, gold star). UIAssets.PlaytimeGift
--- wins if you add one; otherwise the Store's gift artwork.
-local PLAYTIME_GIFT = UIAssets.PlaytimeGift or UIAssets.Gift or "rbxassetid://126373776467964"
-local playBtn = buildCohesiveNav("Playtime Awards", THEME.Playtime, PLAYTIME_GIFT, {
-	Width = PLAYTIME_TILE.X,
-	Radius = 40, Lip = 10, Rim = 6, InnerInset = 6, InnerLine = 3,
-	IconSize = Vector2.new(160, 104), IconTop = 14,
-	LabelHeight = 78, LabelSize = 38, LabelBottom = 8, TextStroke = 4.6,
-	DisplayText = "Playtime\nAwards",
-	StreakSize = Vector2.new(60, 12),
-	-- Gift and name stay clear; studs frame them, as in the reference.
-	Stud = { Margin = 12, SizeShare = 0.085, MinDiameter = 12, MaxDiameter = 18, MaxColumns = 9, MaxRows = 6, Behind = "hide" },
-	Marks = { { 1, 2, 22 }, { -2, 1, 22 }, { -1, 2, 13 } },
-})
+-- Playtime Awards: your finished button artwork (gift, lettering, frame,
+-- sparkles), with molded studs on its orange plate around the gift and the
+-- name - the same glossy domes as the side menu.
+local PLAYTIME_ART = UIAssets.PlaytimeButton or "rbxassetid://124105198585397"
+local PLAYTIME_ART_RATIO = 1.33     -- width / height of the artwork
+local PLAYTIME_HEIGHT = 206         -- the size knob
+playSlot.Size = UDim2.fromOffset(math.floor(PLAYTIME_HEIGHT * PLAYTIME_ART_RATIO), PLAYTIME_HEIGHT)
+-- Where things sit on the artwork, as shares of the picture { x0, y0, x1, y1 }.
+-- Studs go on Plate and stay out of everything else. Nudge these if a stud
+-- touches the gift, the lettering or a sparkle.
+local PLAYTIME_ZONES = {
+	Plate = { 0.06, 0.07, 0.94, 0.88 },
+	Gift = { 0.37, 0.03, 0.64, 0.45 },
+	Text = { { 0.14, 0.44, 0.85, 0.635 }, { 0.26, 0.62, 0.73, 0.84 } },   -- "Playtime", "Awards"
+	Sparkles = { { 0.11, 0.33, 0.20, 0.46 }, { 0.69, 0.24, 0.79, 0.37 }, { 0.80, 0.22, 0.87, 0.33 } },
+}
+local PLAYTIME_STUD_COLOUR = Color3.fromRGB(255, 150, 28)
+local playBtn = Instance.new("TextButton")
+playBtn.Name = "Playtime Awards"           -- PlaytimeAwardsClient finds it by this name
+playBtn.Text = ""
+playBtn.AutoButtonColor = false
+playBtn.BackgroundTransparency = 1
+playBtn.AnchorPoint = Vector2.new(0.5, 0.5)
+playBtn.Position = UDim2.fromScale(0.5, 0.5)
+playBtn.Size = UDim2.fromScale(1, 1)
+playBtn.ZIndex = 2
+playBtn:SetAttribute("OwnPressAnimation", true)
+do
+	local function zone(name, z)
+		local f = Instance.new("Frame")
+		f.Name = name
+		f.BackgroundTransparency = 1
+		f.Active = false
+		f.Position = UDim2.fromScale(z[1], z[2])
+		f.Size = UDim2.fromScale(z[3] - z[1], z[4] - z[2])
+		f.ZIndex = 4
+		f.Parent = playBtn
+		return f
+	end
+	-- Shown only until the artwork has loaded (or if it never does).
+	local fallback = Instance.new("TextLabel")
+	fallback.Name = "Fallback"
+	fallback.Size = UDim2.fromScale(1, 1)
+	fallback.BackgroundColor3 = PLAYTIME_STUD_COLOUR
+	fallback.Text = "Playtime\nAwards"
+	fallback.Font = Enum.Font.FredokaOne
+	fallback.TextScaled = true
+	fallback.TextColor3 = Color3.new(1, 1, 1)
+	fallback.ZIndex = 2
+	fallback.Parent = playBtn
+	local fallbackCorner = Instance.new("UICorner")
+	fallbackCorner.CornerRadius = UDim.new(0.16, 0)
+	fallbackCorner.Parent = fallback
+	local fallbackRim = Instance.new("UIStroke")
+	fallbackRim.Color = Color3.fromRGB(18, 24, 62)
+	fallbackRim.Thickness = 5
+	fallbackRim.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	fallbackRim.Parent = fallback
+
+	local art = Instance.new("ImageLabel")
+	art.Name = "PlaytimeArtwork"
+	art.BackgroundTransparency = 1
+	art.Active = false
+	art.Size = UDim2.fromScale(1, 1)
+	art.Image = PLAYTIME_ART
+	art.ScaleType = Enum.ScaleType.Fit
+	art.ZIndex = 3
+	art.Parent = playBtn
+	task.spawn(function()
+		local deadline = os.clock() + 600
+		while os.clock() < deadline and not art.IsLoaded do task.wait(0.25) end
+		if art.IsLoaded then fallback.Visible = false end
+	end)
+
+	local plate = zone("StudPlate", PLAYTIME_ZONES.Plate)
+	local keepOut = { zone("GiftZone", PLAYTIME_ZONES.Gift) }
+	for index, line in ipairs(PLAYTIME_ZONES.Text) do
+		table.insert(keepOut, zone("TextZone" .. index, line))
+	end
+	for index, sparkle in ipairs(PLAYTIME_ZONES.Sparkles) do
+		table.insert(keepOut, zone("SparkleZone" .. index, sparkle))
+	end
+	local module = ReplicatedStorage:FindFirstChild("StudSurface")
+	local ok, StudSurface = pcall(function() return module and require(module) end)
+	if ok and type(StudSurface) == "table" and StudSurface.Apply then
+		StudSurface.Apply(plate, {
+			Color = PLAYTIME_STUD_COLOUR, KeepOut = keepOut, Behind = "hide", Mirror = false,
+			Margin = 3, CornerRadius = 22, SizeShare = 0.085, MinDiameter = 12, MaxDiameter = 20,
+			PitchShare = 1.6, MaxColumns = 12, MaxRows = 8, Marks = {},
+		})
+	end
+
+	-- Hover lifts, press squashes; the whole button moves as one piece.
+	local motion = Instance.new("UIScale")
+	motion.Parent = playBtn
+	local hover, down = false, false
+	local function settle()
+		local reduced = player:GetAttribute("ReduceMotion") == true
+		local goal = if reduced then 1 elseif down then 0.96 elseif hover then 1.04 else 1
+		TweenService:Create(motion, TweenInfo.new(0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { Scale = goal }):Play()
+	end
+	playBtn.MouseEnter:Connect(function() hover = true settle() end)
+	playBtn.MouseLeave:Connect(function() hover = false down = false settle() end)
+	playBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then down = true settle() end
+	end)
+	playBtn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then down = false settle() end
+	end)
+end
 playBtn.Parent = playSlot
 -- The tile draws its own shadow and lip.
 playShadow.Visible = false
